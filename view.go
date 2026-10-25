@@ -427,7 +427,7 @@ func (v *welcome) view(c *ui.Context) {
 		title, detail = "Unable to read repository", errorText(v.err)
 	} else if v.err != nil {
 		title = "No Git repository found"
-		detail = "Diffscope was opened outside a Git repository. Run diffscope from inside a repository, or choose File → Open Folder… to open one. You can also drop a folder on this window."
+		detail = "' + appName + ' was opened outside a Git repository. Run ' + cliName + ' from inside a repository, or choose File → Open Folder… to open one. You can also drop a folder on this window."
 	}
 	ui.Column(c).Grow(1).Children(func() {
 		emptyPanel(c, pal, title, detail, func() {

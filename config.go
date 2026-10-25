@@ -163,7 +163,7 @@ func (c *config) load() bool {
 		Settings json.RawMessage `json:"settings"`
 	}
 	if err := json.Unmarshal(stripJSONC(data), &file); err != nil {
-		log.Printf("diffscope: %s: %v", c.path, err)
+		log.Printf(cliName+": %s: %v", c.path, err)
 		return false
 	}
 	s := defaultSettings()
@@ -190,7 +190,7 @@ func (c *config) write(s Settings) {
 		return
 	}
 	if err := os.WriteFile(c.path, append(data, '\n'), 0o644); err != nil {
-		log.Printf("diffscope: %v", err)
+		log.Printf(cliName+": %v", err)
 		return
 	}
 	if fi, err := os.Stat(c.path); err == nil {

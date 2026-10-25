@@ -48,10 +48,10 @@ func appBundle() string {
 // runs in, as the terminal helper does.
 func cliScript() string {
 	if bundle := appBundle(); bundle != "" && runtime.GOOS == "darwin" {
-		return fmt.Sprintf("#!/bin/sh\n# Reviews the changes of the Git repository here with Diffscope.\nexec open -n -a %q --args --cwd \"$PWD\" \"$@\"\n", bundle)
+		return fmt.Sprintf("#!/bin/sh\n# Reviews the changes of the Git repository here with ' + appName + '.\nexec open -n -a %q --args --cwd \"$PWD\" \"$@\"\n", bundle)
 	}
 	exe, _ := os.Executable()
-	return fmt.Sprintf("#!/bin/sh\n# Reviews the changes of the Git repository here with Diffscope.\n%q --cwd \"$PWD\" \"$@\" >/dev/null 2>&1 &\n", exe)
+	return fmt.Sprintf("#!/bin/sh\n# Reviews the changes of the Git repository here with ' + appName + '.\n%q --cwd \"$PWD\" \"$@\" >/dev/null 2>&1 &\n", exe)
 }
 
 // installCLI writes the diffscope command into a directory of the PATH.
@@ -65,7 +65,7 @@ func installCLI() {
 				continue
 			}
 			os.MkdirAll(dir, 0o755)
-			path := filepath.Join(dir, "diffscope")
+			path := filepath.Join(dir, cliName)
 			if err := os.WriteFile(path, []byte(cliScript()), 0o755); err != nil {
 				errs = append(errs, err.Error())
 				continue
@@ -73,11 +73,11 @@ func installCLI() {
 			os.Chmod(path, 0o755)
 			mygo.Dialog.Message(mygo.MessageOptions{
 				Type:    mygo.MessageInfo,
-				Message: "The diffscope command is installed",
-				Detail:  "It is at " + path + ". Run diffscope in a Git repository to review its changes, or diffscope <commit> and diffscope <branch>.",
+				Message: "The " + cliName + " command is installed",
+				Detail:  "It is at " + path + ". Run " + cliName + " in a Git repository to review its changes, or " + cliName + " <commit> and " + cliName + " <branch>.",
 			})
 			return
 		}
-		mygo.Dialog.Error("Could not install the diffscope command", strings.Join(errs, "\n"))
+		mygo.Dialog.Error("Could not install the "+cliName+" command", strings.Join(errs, "\n"))
 	}()
 }

@@ -28,7 +28,14 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-const usage = `Usage: diffscope [<commit> | <branch> | <pull request>] [<path>]
+// appName is the user-facing name of the app, cliName the command that
+// Install Command Line Tool… writes. Rename here, not in the strings.
+const (
+	appName = "Diffscope"
+	cliName = "diffscope"
+)
+
+var usage = fmt.Sprintf(`Usage: %[1]s [<commit> | <branch> | <pull request>] [<path>]
 
 Review the uncommitted changes of the Git repository at <path> (default:
 the current directory), a commit, the work tree's changes since it
@@ -41,7 +48,7 @@ Options:
   --pr <number>    review a pull request of the repository's GitHub remote
   --cwd <dir>      the directory relative paths start from
   -h, --help       show this help
-`
+`, cliName)
 
 // request is what a command line asks to open.
 type request struct {
@@ -174,7 +181,7 @@ func showWelcome(err error) {
 	}
 	v := &welcome{err: err}
 	welcomeWin = mygo.NewWindow(mygo.WindowOptions{
-		Title:         "Diffscope",
+		Title:         appName,
 		Width:         640,
 		Height:        420,
 		MinWidth:      480,
@@ -232,14 +239,14 @@ func main() {
 		return
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "diffscope:", err)
+		fmt.Fprintln(os.Stderr, cliName+":", err)
 		os.Exit(2)
 	}
 	// The command line names a repository, unless the app was started from
 	// Finder or the Dock, in /, or by `mygo dev`, in its project.
 	fromUser := len(args) > 0 || dir != wd || (wd != "/" && wd != "" && os.Getenv("MYGO_ENV") != "development")
 
-	name := "Diffscope"
+	name := appName
 	if n := os.Getenv("DIFFSCOPE_NAME"); n != "" {
 		// Another name runs apart from the installed app, for testing.
 		name = n
@@ -255,7 +262,7 @@ func main() {
 		args, workingDir = takeCwd(args, workingDir)
 		req, err := parseArgs(args, workingDir)
 		if err != nil {
-			go mygo.Dialog.Error("Diffscope", err.Error())
+			go mygo.Dialog.Error(appName, err.Error())
 			return
 		}
 		go open(req, true)
