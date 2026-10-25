@@ -48,6 +48,11 @@ func (w *window) pullsView(c *ui.Context) {
 			switch {
 			case w.pullsErr != nil:
 				ui.Text(c, errorText(w.pullsErr)).FontSize(12).TextColor(t.TextMuted).TextAlign(ui.Center)
+				if github.Forbidden(w.pullsErr) || strings.Contains(errorText(w.pullsErr), "rate limit") {
+					if ui.Button(c, "Sign in with gh").Clicked() {
+						signInWithGH()
+					}
+				}
 				if ui.Button(c, "Try Again").Clicked() {
 					w.loadPulls()
 				}
@@ -269,10 +274,19 @@ func (w *window) pullHeader(c *ui.Context, pal *palette) ui.Element {
 				}
 			})
 		}
-		hint := func(icon *ui.SVG, text string, color ui.Color, dismiss func()) {
+		hint := func(icon *ui.SVG, text string, color ui.Color, dismiss func(), actions ...[2]any) {
 			ui.Row(c).Gap(8).Padding(6, 6, 6, 10).Radius(8).Background(color.Alpha(0.08)).Children(func() {
 				ui.Icon(c, icon).FontSize(14).TextColor(color)
 				ui.Text(c, text).FontSize(12).TextColor(color.Mix(t.Text, 0.4)).Grow(1).Shrink(1).MinWidth(0).Selectable()
+				for _, a := range actions {
+					label, fn := a[0].(string), a[1].(func())
+					b := ui.ButtonBase(c).AlignSelf(ui.Center).Padding(3, 9).Radius(6).Children(func() {
+						ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(color)
+					})
+					if b.Clicked() {
+						fn()
+					}
+				}
 				if dismiss != nil && iconButton(c, iconClose, "Dismiss").Size(22, 22).Clicked() {
 					dismiss()
 				}
@@ -285,7 +299,10 @@ func (w *window) pullHeader(c *ui.Context, pal *palette) ui.Element {
 			hint(iconAlert, "Could not read the review comments: "+errorText(p.reviewsErr), t.Danger, nil)
 		}
 		if p.readOnly != "" {
-			hint(iconAlert, p.readOnly, t.TextMuted, nil)
+			hint(iconAlert, p.readOnly, t.TextMuted, nil,
+				[2]any{"Sign in with gh", func() { signInWithGH() }},
+				[2]any{"Open Config File…", func() { openConfig() }},
+			)
 		}
 	})
 }

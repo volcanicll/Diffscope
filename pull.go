@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,6 +15,19 @@ import (
 	"github.com/egoist/godiff/internal/github"
 	"github.com/egoist/mygo"
 )
+
+// signInWithGH opens a terminal running gh auth login, for the token that
+// comments and reviews with.
+func signInWithGH() {
+	if _, err := exec.LookPath("gh"); err != nil {
+		mygo.Dialog.Error("Could not find the GitHub CLI", "Install it from https://cli.github.com, then sign in with gh auth login.")
+		return
+	}
+	script := fmt.Sprintf("tell application %q to do script %q", "Terminal", "gh auth login")
+	if err := exec.Command("osascript", "-e", script).Start(); err != nil {
+		mygo.Dialog.Error("Could not open Terminal", errorText(err))
+	}
+}
 
 // ghRemote is the remote of a repository on GitHub.
 type ghRemote struct {
