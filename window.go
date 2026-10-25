@@ -39,9 +39,9 @@ type source struct {
 
 // What part of the work tree's changes the review shows.
 const (
-	stageAll = iota // the index and the work tree against HEAD
-	stageStaged     // the index against HEAD
-	stageUnstaged   // the work tree against the index
+	stageAll      = iota // the index and the work tree against HEAD
+	stageStaged          // the index against HEAD
+	stageUnstaged        // the work tree against the index
 )
 
 // historyPage is how many commits the History tab loads at a time: git
@@ -156,6 +156,24 @@ type window struct {
 	// stageMode is what part of the work tree's changes the review shows:
 	// all of them, the staged ones, or the unstaged ones.
 	stageMode int
+	// branches are the local branches, for the switcher on the branch chip.
+	branches []string
+	// The repository browser: the files of the work tree, and the one open.
+	repoFiles       []string
+	repoTree        []browseRow
+	repoItems       map[string]*browseNode
+	repoList        ui.ListState
+	repoFilter      string
+	repoLoading     bool
+	repoLoaded      bool
+	repoErr         error
+	browse          string
+	browseList      ui.ListState
+	browseLoading   bool
+	browseBinary    bool
+	browseTruncated bool
+	browseLines     []string
+	browseSegs      [][]highlight.Seg
 	// notes are the notes of the agent's review, by path, and noteSel the
 	// one gone to last.
 	notes   map[string][]*aiNote
@@ -435,6 +453,7 @@ func (w *window) setSource(src source) {
 		go probeMainThread(time.Second)
 	}
 	w.commitOpen = false
+	w.browse = ""
 	// The review takes the focus as the window opens only: the user, who
 	// chose this source, keeps the focus where they put it, as on the
 	// history.
@@ -503,6 +522,9 @@ func (w *window) load() {
 	src := w.source
 	opts := git.Options{ShowWhitespace: w.settings.ShowWhitespace}
 	w.loading = true
+	if w.repoLoaded {
+		w.loadRepoFiles()
+	}
 	w.loadStart = time.Now()
 	started := w.loadStart
 	w.loadErr = nil
@@ -531,6 +553,7 @@ func (w *window) load() {
 			commit = known
 			base   string
 			pulled pulledRequest
+			local  []string
 			err    error
 			wg     sync.WaitGroup
 		)
@@ -539,6 +562,10 @@ func (w *window) load() {
 			go func() {
 				defer wg.Done()
 				branch = w.repo.Branch()
+				if src.kind == sourceWorkingTree {
+					branches, _ := w.repo.Branches()
+					local = branches
+				}
 			}()
 		}
 		sig := ""
@@ -614,6 +641,9 @@ func (w *window) load() {
 			w.loadErr = err
 			w.loadStatus = ""
 			w.branch = branch
+			if src.kind == sourceWorkingTree {
+				w.branches = local
+			}
 			if err == nil {
 				w.commit = commit
 			}

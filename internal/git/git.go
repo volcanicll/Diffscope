@@ -151,6 +151,44 @@ func (r *Repo) Branch() string {
 	return r.gitString("rev-parse", "--short", "HEAD")
 }
 
+// Branches lists the local branches, as git lists them.
+func (r *Repo) Branches() ([]string, error) {
+	out, err := r.Git("branch", "--format=%(refname:short)")
+	if err != nil {
+		return nil, err
+	}
+	var branches []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			branches = append(branches, line)
+		}
+	}
+	return branches, nil
+}
+
+// Checkout switches to a local branch.
+func (r *Repo) Checkout(branch string) error {
+	_, err := r.Git("checkout", "-q", branch)
+	return err
+}
+
+// AllFiles lists the tracked files and the untracked ones git does not
+// ignore, sorted.
+func (r *Repo) AllFiles() ([]string, error) {
+	out, err := r.Git("-c", "core.quotePath=false", "ls-files", "-c", "-o", "--exclude-standard", "-z", "--", ".")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, p := range bytes.Split(out, []byte{0}) {
+		if len(p) > 0 {
+			paths = append(paths, string(p))
+		}
+	}
+	slices.Sort(paths)
+	return paths, nil
+}
+
 // ConfigValue returns a value of git's configuration, "" when unset.
 func (r *Repo) ConfigValue(key string) string {
 	return r.gitString("config", "--get", key)

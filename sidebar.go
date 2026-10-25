@@ -269,28 +269,38 @@ func (w *window) sidebar(c *ui.Context) {
 				ui.Spacer(c)
 			}
 		})
-		if w.tab == 2 && !w.gh.ok() {
+		if w.tab > w.repoTabIndex() {
 			w.tab = 0
 		}
 		ui.Column(c).Padding(2, 10, 8).Children(func() {
-			switch w.tab {
-			case 0:
+			switch {
+			case w.tab == 0:
 				if searchInput(c, &w.filter, "Filter files", &w.filterFocus, &w.typing) {
 					w.matchesFor = "\x00"
 					w.buildTree()
 					w.rowsDirty = true
 				}
-			case 1:
+			case w.tab == 1:
 				searchInput(c, &w.historyFilter, "Filter history", &w.filterFocus, &w.typing)
+			case w.tab == w.repoTabIndex():
+				if searchInput(c, &w.repoFilter, "Find a file", &w.filterFocus, &w.typing) {
+					w.buildRepoTree()
+					w.rowsDirty = true
+				}
 			default:
 				searchInput(c, &w.pullsFilter, "Filter pull requests", &w.filterFocus, &w.typing)
 			}
 		})
-		switch w.tab {
-		case 0:
+		switch {
+		case w.tab == 0:
 			w.fileTree(c)
-		case 1:
+		case w.tab == 1:
 			w.historyView(c)
+		case w.tab == w.repoTabIndex():
+			if !w.repoLoaded && !w.repoLoading {
+				w.loadRepoFiles()
+			}
+			w.repoView(c)
 		default:
 			w.pullsView(c)
 		}
@@ -327,6 +337,7 @@ func (w *window) tabControl(c *ui.Context) bool {
 	if w.gh.ok() {
 		items = append(items, item{iconPull, "Pull Requests (⌘3)"})
 	}
+	items = append(items, item{iconFolderOpen, "Repository (⌘4)"})
 	seg := ui.SegmentedBase(c, &w.tab, len(items))
 	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.12)).Label("Sidebar").Children(func() {
 		for i, it := range items {

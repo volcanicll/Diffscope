@@ -88,6 +88,7 @@ func buildMenu() *mygo.Menu {
 			{Label: "Files", Accelerator: "CmdOrCtrl+1", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = 0, true })},
 			{Label: "History", Accelerator: "CmdOrCtrl+2", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = 1, true })},
 			{Label: "Pull Requests", Accelerator: "CmdOrCtrl+3", Click: inWindow(func(w *window) { w.showPulls() })},
+			{Label: "Repository", Accelerator: "CmdOrCtrl+4", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = w.repoTabIndex(), true })},
 			mygo.Separator(),
 			{Label: "Review with AI", Accelerator: "CmdOrCtrl+Shift+I", Click: inWindow(func(w *window) { w.reviewWithAI() })},
 			{Label: "Group Files", Submenu: []*mygo.MenuItem{

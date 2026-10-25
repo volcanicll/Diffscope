@@ -98,6 +98,7 @@ func (w *window) diffList(c *ui.Context) {
 
 // revealFile scrolls the surface to a file's card.
 func (w *window) revealFile(i int) {
+	w.browse = ""
 	if w.rowsDirty {
 		w.buildRows()
 	}

@@ -104,7 +104,16 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 			ui.Text(c, filepath.Dir(abbreviateHome(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		})
 		if w.branch != "" && w.source.kind != sourcePull {
-			chip(c, pal, iconBranch, w.branch, t.TextMuted).Tooltip("Branch " + w.branch)
+			branch := chip(c, pal, iconBranch, w.branch, t.TextMuted).Tooltip("Branch " + w.branch)
+			if w.source.kind == sourceWorkingTree && len(w.branches) > 0 {
+				branch.Menu(func(m *ui.Menu) {
+					for _, b := range w.branches {
+						if m.Item(b).Checked(b == w.branch).Chosen() {
+							w.switchBranch(b)
+						}
+					}
+				})
+			}
 		}
 		switch w.source.kind {
 		case sourceCommit:
@@ -236,6 +245,10 @@ func (w *window) stageControl(c *ui.Context, pal *palette) {
 // and reports whether it built the review list in this pass.
 func (w *window) mainArea(c *ui.Context, pal *palette) bool {
 	t := c.Theme()
+	if w.browse != "" {
+		w.browseView(c, pal)
+		return false
+	}
 	if w.commitOpen && w.source.kind == sourceWorkingTree {
 		w.commitView(c)
 		return false
@@ -430,6 +443,10 @@ func (w *window) shortcuts(c *ui.Context, reviewBuilt bool) {
 	}
 	if (w.selHunk >= 0 || w.noteSel != nil) && c.Shortcut(0, ui.KeyEscape) {
 		w.selFile, w.selHunk, w.noteSel = -1, -1, nil
+	}
+	if w.browse != "" && c.Shortcut(0, ui.KeyEscape) {
+		w.browse = ""
+		w.rowsDirty = true
 	}
 	if c.Shortcut(ui.Alt, ui.KeyZ) {
 		toggleWrap()
