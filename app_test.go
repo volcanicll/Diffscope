@@ -409,6 +409,36 @@ func TestDark(t *testing.T) {
 	snapshot(t, tt, "dark")
 }
 
+func TestWelcomeRecent(t *testing.T) {
+	state.mu.Lock()
+	old := state.data.Recent
+	state.data.Recent = []string{t.TempDir(), t.TempDir()}
+	state.mu.Unlock()
+	t.Cleanup(func() {
+		state.mu.Lock()
+		state.data.Recent = old
+		state.mu.Unlock()
+	})
+	tt := ui.NewTester((&welcome{}).view, 640, 420)
+	tt.Frame()
+	if !tt.HasText("Recent repositories") {
+		t.Errorf("no recents in %q", tt.Texts())
+	}
+	if !tt.HasText(state.data.Recent[0]) {
+		t.Errorf("no %q in %q", state.data.Recent[0], tt.Texts())
+	}
+	snapshot(t, tt, "welcome-recent")
+
+	// Without recents the list is absent.
+	state.mu.Lock()
+	state.data.Recent = nil
+	state.mu.Unlock()
+	tt.Frame()
+	if tt.HasText("Recent repositories") {
+		t.Error("recents shown without any")
+	}
+}
+
 func TestHorizontalScroll(t *testing.T) {
 	dir := testRepo(t)
 	writeFile(t, dir, "main.go", strings.Replace(mainGo, `"Hello, " + name`, `"Hello, " + name + "`+strings.Repeat("long ", 80)+`"`, 1))

@@ -182,6 +182,22 @@ func showWelcome(err error) {
 		TitleBarStyle: mygo.TitleBarHiddenInset,
 		Content:       ui.View(v.view),
 	})
+	// A folder dropped on the welcome window opens a review of it.
+	welcomeWin.OnFileDrop(func(e *mygo.FileDropEvent) {
+		for _, p := range e.Paths {
+			if info, err := os.Stat(p); err != nil || !info.IsDir() {
+				continue
+			}
+			go func(p string) {
+				if err := openWindow(p, source{kind: sourceWorkingTree}); err != nil {
+					mygo.Dialog.Error("Could not open the folder", errorText(err))
+					return
+				}
+				closeWelcome()
+			}(p)
+			return
+		}
+	})
 }
 
 func closeWelcome() {

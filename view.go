@@ -422,16 +422,44 @@ func (v *welcome) view(c *ui.Context) {
 	bar := c.TitleBar()
 	ui.Box(c).Height(max(bar.Height, 40)).DragWindow().FillWidth()
 	title := "Open a Git repository"
-	detail := "Run diffscope from a Git repository in Terminal, or choose File → Open Folder… to open one."
+	detail := "Run diffscope from a Git repository in Terminal, or choose File → Open Folder… to open one. You can also drop a folder on this window."
 	if v.err != nil && !errors.Is(v.err, git.ErrNotRepository) {
 		title, detail = "Unable to read repository", errorText(v.err)
 	} else if v.err != nil {
 		title = "No Git repository found"
-		detail = "Diffscope was opened outside a Git repository. Run diffscope from inside a repository, or choose File → Open Folder… to open one."
+		detail = "Diffscope was opened outside a Git repository. Run diffscope from inside a repository, or choose File → Open Folder… to open one. You can also drop a folder on this window."
 	}
-	emptyPanel(c, pal, title, detail, func() {
-		if ui.PrimaryButton(c, "Open Folder…").Clicked() {
-			openFolder()
+	ui.Column(c).Grow(1).Children(func() {
+		emptyPanel(c, pal, title, detail, func() {
+			if ui.PrimaryButton(c, "Open Folder…").Clicked() {
+				openFolder()
+			}
+		})
+		welcomeRecent(c, t)
+	})
+}
+
+// welcomeRecent lists the repositories of File → Open Recent under the
+// welcome panel, to open one without the menu.
+func welcomeRecent(c *ui.Context, t *ui.Theme) {
+	recent := state.recent()
+	if len(recent) == 0 {
+		return
+	}
+	ui.Column(c).Shrink(1).MaxWidth(520).Padding(0, 28, 24).Gap(2).Children(func() {
+		ui.Text(c, "Recent repositories").FontSize(11).TextColor(t.TextMuted).Padding(0, 10, 4)
+		for _, root := range recent {
+			row := ui.Row(c).Height(30).Padding(0, 10).Gap(8).Radius(6).MinWidth(0)
+			if row.Hovered() {
+				row.Background(ui.RGBA(127, 127, 127, 0.08))
+			}
+			if row.Clicked() {
+				go openRecent(root)
+			}
+			row.Children(func() {
+				ui.Icon(c, iconFolder).FontSize(14).TextColor(t.TextMuted)
+				ui.Text(c, abbreviateHome(root)).FontSize(13).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+			})
 		}
 	})
 }

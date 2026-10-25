@@ -270,6 +270,20 @@ func openWindow(dir string, src source) error {
 		windowsMu.Unlock()
 	})
 	w.win.OnFocus(func() { go w.checkChanges() })
+	// A folder dropped on a review window opens a review of it.
+	w.win.OnFileDrop(func(e *mygo.FileDropEvent) {
+		for _, p := range e.Paths {
+			if info, err := os.Stat(p); err != nil || !info.IsDir() {
+				continue
+			}
+			go func(p string) {
+				if err := openWindow(p, source{kind: sourceWorkingTree}); err != nil {
+					mygo.Dialog.Error("Could not open the folder", errorText(err))
+				}
+			}(p)
+			return
+		}
+	})
 	go noteRecent(repo.Root)
 	w.load()
 	w.loadHistory()
