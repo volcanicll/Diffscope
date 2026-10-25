@@ -84,10 +84,10 @@ func (w *window) repoTabIndex() int {
 func (w *window) buildRepoTree() {
 	type dirNode struct {
 		dirs  map[string]*dirNode
-		files []string
-		order []string // the names of the dirs and files, in file order
+		files map[string]string // base name to slash path
+		order []string          // the names of the dirs and files, in file order
 	}
-	newDir := func() *dirNode { return &dirNode{dirs: map[string]*dirNode{}} }
+	newDir := func() *dirNode { return &dirNode{dirs: map[string]*dirNode{}, files: map[string]string{}} }
 	root := newDir()
 	filter := strings.TrimSpace(w.repoFilter)
 	for _, p := range w.repoFiles {
@@ -105,17 +105,16 @@ func (w *window) buildRepoTree() {
 			}
 			d = next
 		}
-		d.order = append(d.order, "f"+parts[len(parts)-1])
-		d.files = append(d.files, p)
+		name := parts[len(parts)-1]
+		d.order = append(d.order, "f"+name)
+		d.files[name] = p
 	}
 	w.repoTree, w.repoItems = nil, map[string]*browseNode{}
-	fi := 0
 	var walk func(d *dirNode, path string, depth int)
 	walk = func(d *dirNode, path string, depth int) {
 		for _, o := range d.order {
 			if o[0] == 'f' {
-				p := d.files[fi]
-				fi++
+				p := d.files[o[1:]]
 				key := "f:" + p
 				w.repoItems[key] = &browseNode{name: baseName(p), path: p}
 				w.repoTree = append(w.repoTree, browseRow{key: key, depth: depth})

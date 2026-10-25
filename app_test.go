@@ -574,3 +574,29 @@ func TestFileIcons(t *testing.T) {
 		}
 	}
 }
+
+func TestRepoTree(t *testing.T) {
+	w, _ := newTestWindow(t, testRepo(t))
+	// The directory a holds files after its subtree, which once indexed
+	// the files of every directory with one counter.
+	w.repoFiles = []string{"a/b/c.txt", "a/b/d.txt", "a/e.txt", "f.go", "g.md"}
+	w.buildRepoTree()
+	var names []string
+	for _, r := range w.repoTree {
+		names = append(names, w.repoItems[r.key].name)
+	}
+	want := []string{"a", "b", "c.txt", "d.txt", "e.txt", "f.go", "g.md"}
+	if !slices.Equal(names, want) {
+		t.Errorf("rows %q, want %q", names, want)
+	}
+	// The filter finds files in closed directories, with their dirs.
+	w.repoFilter = "d.txt"
+	w.buildRepoTree()
+	names = nil
+	for _, r := range w.repoTree {
+		names = append(names, w.repoItems[r.key].name)
+	}
+	if want := []string{"a", "b", "d.txt"}; !slices.Equal(names, want) {
+		t.Errorf("filtered rows %q, want %q", names, want)
+	}
+}
