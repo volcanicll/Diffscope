@@ -22,10 +22,10 @@ var (
 )
 
 // Path returns the app's own PATH, the user's shell's, and the usual
-// directories of package managers after them. With GODIFF_NO_SHELL_PATH,
+// directories of package managers after them. With DIFFSCOPE_NO_SHELL_PATH,
 // as in tests, it is the app's own alone.
 func Path() string {
-	if os.Getenv("GODIFF_NO_SHELL_PATH") != "" {
+	if os.Getenv("DIFFSCOPE_NO_SHELL_PATH") != "" {
 		return os.Getenv("PATH")
 	}
 	once.Do(func() { path = resolve() })
@@ -66,7 +66,7 @@ func shellPath() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	// Markers keep out what the shell's configuration prints.
-	cmd := exec.CommandContext(ctx, sh, "-i", "-l", "-c", `printf "__GODIFF_PATH__%s__END__" "$PATH"`)
+	cmd := exec.CommandContext(ctx, sh, "-i", "-l", "-c", `printf "__DIFFSCOPE_PATH__%s__END__" "$PATH"`)
 	proc.HideConsole(cmd)
 	cmd.Stdin = nil
 	out, err := cmd.Output()
@@ -74,12 +74,12 @@ func shellPath() string {
 		return ""
 	}
 	s := string(out)
-	start := strings.Index(s, "__GODIFF_PATH__")
+	start := strings.Index(s, "__DIFFSCOPE_PATH__")
 	end := strings.LastIndex(s, "__END__")
 	if start < 0 || end < start {
 		return ""
 	}
-	return s[start+len("__GODIFF_PATH__") : end]
+	return s[start+len("__DIFFSCOPE_PATH__") : end]
 }
 
 // LookPath finds a program in Path.

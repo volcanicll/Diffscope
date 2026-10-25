@@ -127,7 +127,7 @@ func run(ctx context.Context, dir string, stdin io.Reader, args ...string) ([]by
 }
 
 // debug logs every git command with how long it took.
-var debug = os.Getenv("GODIFF_DEBUG") != ""
+var debug = os.Getenv("DIFFSCOPE_DEBUG") != ""
 
 // Git runs git in the repository and returns what it printed.
 func (r *Repo) Git(args ...string) ([]byte, error) {
@@ -508,7 +508,7 @@ func (r *Repo) CommitChanges(message string, paths []string) (string, error) {
 	if _, err := run(context.Background(), r.Root, pathspecs(), "--literal-pathspecs", "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"); err != nil {
 		return "", err
 	}
-	msg, err := os.CreateTemp("", "godiff-message-*")
+	msg, err := os.CreateTemp("", "diffscope-message-*")
 	if err != nil {
 		return "", err
 	}

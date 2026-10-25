@@ -106,7 +106,7 @@ func jsonLine(v any) string {
 }
 
 func TestRun(t *testing.T) {
-	t.Setenv("GODIFF_NO_SHELL_PATH", "1")
+	t.Setenv("DIFFSCOPE_NO_SHELL_PATH", "1")
 	var structured map[string]any
 	json.Unmarshal([]byte(answer), &structured)
 	fenced := "```json\n" + answer + "\n```"
@@ -226,7 +226,7 @@ func TestRun(t *testing.T) {
 }
 
 func TestRunErrors(t *testing.T) {
-	t.Setenv("GODIFF_NO_SHELL_PATH", "1")
+	t.Setenv("DIFFSCOPE_NO_SHELL_PATH", "1")
 	fakeAgent(t, "codex", jsonLine(map[string]any{"type": "turn.failed", "error": map[string]any{"message": `{"type":"error","status":400,"error":{"message":"The model is not supported."}}`}}))
 	a, _ := ByName("codex")
 	_, err := Run(context.Background(), a, Request{Files: files, Dir: t.TempDir()}, nil)

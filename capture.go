@@ -10,10 +10,10 @@ import (
 	"github.com/egoist/mygo"
 )
 
-// captureIfAsked writes a PNG of the window to $GODIFF_CAPTURE once it has
+// captureIfAsked writes a PNG of the window to $DIFFSCOPE_CAPTURE once it has
 // loaded, then quits: for checking how the app looks from scripts.
 func (w *window) captureIfAsked() {
-	path := os.Getenv("GODIFF_CAPTURE")
+	path := os.Getenv("DIFFSCOPE_CAPTURE")
 	if path == "" {
 		return
 	}
@@ -21,9 +21,9 @@ func (w *window) captureIfAsked() {
 		time.Sleep(2500 * time.Millisecond)
 		// A pull request loads from GitHub, which takes its time.
 		w.waitFor(time.Minute, func() bool { return !w.loading })
-		if setup := os.Getenv("GODIFF_CAPTURE_SETUP"); setup != "" {
+		if setup := os.Getenv("DIFFSCOPE_CAPTURE_SETUP"); setup != "" {
 			var prof *os.File
-			if path := os.Getenv("GODIFF_CPUPROFILE"); path != "" {
+			if path := os.Getenv("DIFFSCOPE_CPUPROFILE"); path != "" {
 				prof, _ = os.Create(path)
 				pprof.StartCPUProfile(prof)
 			}

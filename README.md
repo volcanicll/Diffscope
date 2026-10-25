@@ -1,4 +1,4 @@
-# Godiff
+# Diffscope
 
 A native, minimal, local diff viewer for reviewing Git changes and committing
 them: built in Go
@@ -29,7 +29,7 @@ dark mode, menus and vibrancy.
   tree with a branch.
 - **Pull requests**:
   list the open pull requests of the repository's GitHub remote
-  (<kbd>⌘3</kbd>) and review any of them, open or not. Godiff fetches its
+  (<kbd>⌘3</kbd>) and review any of them, open or not. Diffscope fetches its
   commits into your clone, so it reads as local changes do: highlighted,
   expandable, with pictures. Its files group by kind (code, tests, docs,
   config, dependencies, generated), each group with how much of it you
@@ -63,17 +63,17 @@ dark mode, menus and vibrancy.
 go run . [<commit> | <branch> | <pull request>] [<path>]
 ```
 
-- `godiff` reviews the uncommitted changes of the repository you are in.
-- `godiff HEAD~1` reviews a commit, against its first parent.
-- `godiff main` compares the work tree, committed or not, with where it
+- `diffscope` reviews the uncommitted changes of the repository you are in.
+- `diffscope HEAD~1` reviews a commit, against its first parent.
+- `diffscope main` compares the work tree, committed or not, with where it
   branched off `main`.
-- `godiff --pr 123`, `godiff owner/repo#123` or `godiff
+- `diffscope --pr 123`, `diffscope owner/repo#123` or `diffscope
   https://github.com/owner/repo/pull/123` reviews a pull request of the
   repository's GitHub remote (`upstream`, else `origin`).
-- `godiff ../other-repo` opens another repository.
+- `diffscope ../other-repo` opens another repository.
 
-Every repository opens in a window of its own. **Godiff → Install Command Line
-Tool…** installs a `godiff` command that opens the app on the repository it
+Every repository opens in a window of its own. **Diffscope → Install Command Line
+Tool…** installs a `diffscope` command that opens the app on the repository it
 runs in. Started from Finder or the Dock, the app reopens the repository opened
 last, and **File → Open Recent** lists the ten opened lately.
 
@@ -99,7 +99,7 @@ last, and **File → Open Recent** lists the ten opened lately.
 
 ## Configuration
 
-Settings live in `~/.godiff/godiff.jsonc` (**Godiff → Open Config File…**),
+Settings live in `~/.diffscope/godiff.jsonc` (**Diffscope → Open Config File…**),
 and apply to open windows as the file changes:
 
 ```jsonc
@@ -122,7 +122,7 @@ and apply to open windows as the file changes:
 }
 ```
 
-Files open in `$GODIFF_EDITOR` or `editorCommand` (`{file}`, `{line}` and
+Files open in `$DIFFSCOPE_EDITOR` or `editorCommand` (`{file}`, `{line}` and
 `{repo}` are replaced), else VS Code, else the app the system opens them with.
 
 Pull requests need no token to be read when they are public; to comment
@@ -134,18 +134,18 @@ login`), or set `githubToken` or `$GH_TOKEN`.
 ```sh
 go tool mygo dev          # the app, rebuilt as you edit
 go test ./...             # including the views, run without a window
-go tool mygo build        # Godiff.app and a disk image in build/
+go tool mygo build        # Diffscope.app and a disk image in build/
 go run ./tools/genicon    # render resources/icon.svg to the app icon
 go run ./tools/genfileicons <@pierre/trees package>  # update the file icons
 ```
 
-`GODIFF_SNAPSHOTS=<dir> go test .` saves PNGs of the views the tests drive, and
-`GODIFF_CAPTURE=<file.png>` makes the app save a picture of its window once
-loaded, then quit. `GODIFF_DEBUG=1` logs every git command with its duration, the
+`DIFFSCOPE_SNAPSHOTS=<dir> go test .` saves PNGs of the views the tests drive, and
+`DIFFSCOPE_CAPTURE=<file.png>` makes the app save a picture of its window once
+loaded, then quit. `DIFFSCOPE_DEBUG=1` logs every git command with its duration, the
 frames that take more than 4ms to build, and whenever the main thread keeps
-work waiting over 30ms. `GODIFF_NAME=<name>` runs a build apart from the
+work waiting over 30ms. `DIFFSCOPE_NAME=<name>` runs a build apart from the
 installed app, which would otherwise take its windows, and
-`GODIFF_STARTUP_PROFILE=<file>` writes a CPU profile of the first seconds.
+`DIFFSCOPE_STARTUP_PROFILE=<file>` writes a CPU profile of the first seconds.
 
 The code is in a few parts:
 
@@ -161,5 +161,5 @@ The code is in a few parts:
 
 LLM walkthroughs, GitHub and GitLab pull request review, Markdown previews,
 editing files in place, definition lookup, `a..b` ranges, and separate cards
-for the staged and unstaged parts of a file (Godiff shows a file's changes
+for the staged and unstaged parts of a file (Diffscope shows a file's changes
 against `HEAD` as one).

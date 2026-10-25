@@ -1,11 +1,11 @@
-// Godiff is a native, minimal, local diff viewer for reviewing Git changes
+// Diffscope is a native, minimal, local diff viewer for reviewing Git changes
 // and committing them, drawn by MyGo.
 //
-//	godiff                 the uncommitted changes of the repository here
-//	godiff <path>          those of another repository
-//	godiff <commit>        a commit, as HEAD~1 or a1b2c3d
-//	godiff <branch>        the work tree's changes since it branched off
-//	godiff --pr <number>   a pull request on GitHub, as owner/repo#123 or
+//	diffscope                 the uncommitted changes of the repository here
+//	diffscope <path>          those of another repository
+//	diffscope <commit>        a commit, as HEAD~1 or a1b2c3d
+//	diffscope <branch>        the work tree's changes since it branched off
+//	diffscope --pr <number>   a pull request on GitHub, as owner/repo#123 or
 //	                       its URL too
 package main
 
@@ -28,7 +28,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-const usage = `Usage: godiff [<commit> | <branch> | <pull request>] [<path>]
+const usage = `Usage: diffscope [<commit> | <branch> | <pull request>] [<path>]
 
 Review the uncommitted changes of the Git repository at <path> (default:
 the current directory), a commit, the work tree's changes since it
@@ -174,7 +174,7 @@ func showWelcome(err error) {
 	}
 	v := &welcome{err: err}
 	welcomeWin = mygo.NewWindow(mygo.WindowOptions{
-		Title:         "Godiff",
+		Title:         "Diffscope",
 		Width:         640,
 		Height:        420,
 		MinWidth:      480,
@@ -216,15 +216,15 @@ func main() {
 		return
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "godiff:", err)
+		fmt.Fprintln(os.Stderr, "diffscope:", err)
 		os.Exit(2)
 	}
 	// The command line names a repository, unless the app was started from
 	// Finder or the Dock, in /, or by `mygo dev`, in its project.
 	fromUser := len(args) > 0 || dir != wd || (wd != "/" && wd != "" && os.Getenv("MYGO_ENV") != "development")
 
-	name := "Godiff"
-	if n := os.Getenv("GODIFF_NAME"); n != "" {
+	name := "Diffscope"
+	if n := os.Getenv("DIFFSCOPE_NAME"); n != "" {
 		// Another name runs apart from the installed app, for testing.
 		name = n
 	}
@@ -239,7 +239,7 @@ func main() {
 		args, workingDir = takeCwd(args, workingDir)
 		req, err := parseArgs(args, workingDir)
 		if err != nil {
-			go mygo.Dialog.Error("Godiff", err.Error())
+			go mygo.Dialog.Error("Diffscope", err.Error())
 			return
 		}
 		go open(req, true)
@@ -268,7 +268,7 @@ func main() {
 			go open(request{dir: wd}, false)
 		}
 	})
-	if path := os.Getenv("GODIFF_CPUPROFILE"); path != "" {
+	if path := os.Getenv("DIFFSCOPE_CPUPROFILE"); path != "" {
 		// The whole session, written as the app quits.
 		if f, err := os.Create(path); err == nil {
 			pprof.StartCPUProfile(f)
@@ -278,7 +278,7 @@ func main() {
 			})
 		}
 	}
-	if path := os.Getenv("GODIFF_STARTUP_PROFILE"); path != "" {
+	if path := os.Getenv("DIFFSCOPE_STARTUP_PROFILE"); path != "" {
 		// The first seconds, which draw the window for the first time.
 		if f, err := os.Create(path); err == nil {
 			pprof.StartCPUProfile(f)

@@ -78,7 +78,7 @@ func (w *window) view(c *ui.Context) {
 }
 
 // debugFrames logs the views that take long to build.
-var debugFrames = os.Getenv("GODIFF_DEBUG") != ""
+var debugFrames = os.Getenv("DIFFSCOPE_DEBUG") != ""
 
 // toolbar is the bar along the top of the review, which drags the window.
 func (w *window) toolbar(c *ui.Context, pal *palette) {
@@ -422,12 +422,12 @@ func (v *welcome) view(c *ui.Context) {
 	bar := c.TitleBar()
 	ui.Box(c).Height(max(bar.Height, 40)).DragWindow().FillWidth()
 	title := "Open a Git repository"
-	detail := "Run godiff from a Git repository in Terminal, or choose File → Open Folder… to open one."
+	detail := "Run diffscope from a Git repository in Terminal, or choose File → Open Folder… to open one."
 	if v.err != nil && !errors.Is(v.err, git.ErrNotRepository) {
 		title, detail = "Unable to read repository", errorText(v.err)
 	} else if v.err != nil {
 		title = "No Git repository found"
-		detail = "Godiff was opened outside a Git repository. Run godiff from inside a repository, or choose File → Open Folder… to open one."
+		detail = "Diffscope was opened outside a Git repository. Run diffscope from inside a repository, or choose File → Open Folder… to open one."
 	}
 	emptyPanel(c, pal, title, detail, func() {
 		if ui.PrimaryButton(c, "Open Folder…").Clicked() {

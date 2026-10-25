@@ -80,7 +80,7 @@ func (w *window) fileNote(f *fileState) string {
 	case f.Binary:
 		return "Binary file changed."
 	case f.TooLarge:
-		return "File is too large, so Godiff skipped rendering it."
+		return "File is too large, so Diffscope skipped rendering it."
 	case len(f.Hunks) == 0 && f.OldPath != f.Path:
 		return "File renamed without changes."
 	case len(f.Hunks) == 0 && f.ModeChange != "":

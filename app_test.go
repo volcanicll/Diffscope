@@ -19,7 +19,7 @@ import (
 
 func TestMain(m *testing.M) {
 	// Keep the user's settings out of the tests, and the tests' out of them.
-	dir, _ := os.MkdirTemp("", "godiff-config")
+	dir, _ := os.MkdirTemp("", "diffscope-config")
 	cfg.path = filepath.Join(dir, "godiff.jsonc")
 	cfg.settings = defaultSettings()
 	code := m.Run()
@@ -104,9 +104,9 @@ func newTestWindow(t *testing.T, dir string) (*window, *ui.Tester) {
 	return w, tt
 }
 
-// snapshot saves the tester's frame in $GODIFF_SNAPSHOTS, to look at.
+// snapshot saves the tester's frame in $DIFFSCOPE_SNAPSHOTS, to look at.
 func snapshot(t *testing.T, tt *ui.Tester, name string) {
-	dir := os.Getenv("GODIFF_SNAPSHOTS")
+	dir := os.Getenv("DIFFSCOPE_SNAPSHOTS")
 	if dir == "" {
 		return
 	}

@@ -124,7 +124,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) (ht
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	req.Header.Set("User-Agent", "godiff")
+	req.Header.Set("User-Agent", "diffscope")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

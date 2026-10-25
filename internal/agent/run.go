@@ -44,7 +44,7 @@ func Run(ctx context.Context, a Agent, req Request, progress func(string)) (*Ana
 		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 			dir = os.TempDir()
 		}
-		f, err := os.CreateTemp(dir, "godiff-review-*.patch")
+		f, err := os.CreateTemp(dir, "diffscope-review-*.patch")
 		if err != nil {
 			return nil, err
 		}
@@ -74,14 +74,14 @@ func Run(ctx context.Context, a Agent, req Request, progress func(string)) (*Ana
 			args = append(args, "--model", req.Model)
 		}
 	case "codex":
-		schemaFile, err := os.CreateTemp("", "godiff-schema-*.json")
+		schemaFile, err := os.CreateTemp("", "diffscope-schema-*.json")
 		if err != nil {
 			return nil, err
 		}
 		schemaFile.WriteString(schema)
 		schemaFile.Close()
 		defer os.Remove(schemaFile.Name())
-		last, err := os.CreateTemp("", "godiff-answer-*.txt")
+		last, err := os.CreateTemp("", "diffscope-answer-*.txt")
 		if err != nil {
 			return nil, err
 		}

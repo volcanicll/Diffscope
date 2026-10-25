@@ -14,7 +14,7 @@ import (
 // FindToken returns a token for github.com from the environment, else from
 // the GitHub CLI's login, "" when there is neither.
 func FindToken() string {
-	for _, k := range []string{"GODIFF_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"} {
+	for _, k := range []string{"DIFFSCOPE_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"} {
 		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
 			return v
 		}

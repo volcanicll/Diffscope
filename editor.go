@@ -17,7 +17,7 @@ import (
 var editorArgs = regexp.MustCompile(`"[^"]+"|'[^']+'|\S+`)
 
 // openEditor opens a file at a line in the user's editor: the command of
-// $GODIFF_EDITOR or the settings, where {file}, {line} and {repo} stand
+// $DIFFSCOPE_EDITOR or the settings, where {file}, {line} and {repo} stand
 // for the file, the line and the repository, else VS Code, else the app
 // the system opens the file with.
 func openEditor(command, repo, file string, line int) error {
@@ -29,7 +29,7 @@ func openEditor(command, repo, file string, line int) error {
 		repo = filepath.Dir(file)
 	}
 	var candidates [][]string
-	if env := os.Getenv("GODIFF_EDITOR"); env != "" {
+	if env := os.Getenv("DIFFSCOPE_EDITOR"); env != "" {
 		command = env
 	}
 	if command = strings.TrimSpace(command); command != "" {

@@ -310,9 +310,9 @@ func TestPullRequestReadOnly(t *testing.T) {
 	f := &fakeGitHub{base: base, head: head, comments: `[]`}
 	f.serve(t)
 	withSettings(t, func(s *Settings) { s.GithubToken = "" })
-	t.Setenv("GODIFF_NO_SHELL_PATH", "1")
+	t.Setenv("DIFFSCOPE_NO_SHELL_PATH", "1")
 	t.Setenv("PATH", t.TempDir()) // no gh
-	for _, k := range []string{"GODIFF_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"} {
+	for _, k := range []string{"DIFFSCOPE_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"} {
 		t.Setenv(k, "")
 	}
 	token.Lock()

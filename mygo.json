@@ -1,7 +1,7 @@
 {
-  "name": "Godiff",
-  "identifier": "dev.egoist.godiff",
+  "name": "Diffscope",
+  "identifier": "dev.diffscope.app",
   "version": "0.1.0",
-  "copyright": "© 2026 EGOIST",
+  "copyright": "© 2026 Diffscope",
   "out": "build"
 }

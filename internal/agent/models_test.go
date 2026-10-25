@@ -39,7 +39,7 @@ func TestModelLists(t *testing.T) {
 }
 
 func TestOpenCodeDefault(t *testing.T) {
-	t.Setenv("GODIFF_NO_SHELL_PATH", "1")
+	t.Setenv("DIFFSCOPE_NO_SHELL_PATH", "1")
 	dir := fakeAgent(t, "opencode", "")
 	os.WriteFile(filepath.Join(dir, "cmd-models"), []byte("deepseek/deepseek-flash\nopenai/gpt-6\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "cmd---version"), []byte("opencode v2.0.22\n"), 0o644)

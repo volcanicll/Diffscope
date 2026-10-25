@@ -111,7 +111,7 @@ type window struct {
 	focusList        bool
 	focusedOnce      bool
 	focusHistory     bool
-	switchedAt       time.Time // when the source last changed, for GODIFF_DEBUG
+	switchedAt       time.Time // when the source last changed, for DIFFSCOPE_DEBUG
 	debugPressed     bool
 	// hold keeps the background work of tests in held, to run frames
 	// while it waits.
@@ -313,7 +313,7 @@ func newWindow(repo *git.Repo, src source) *window {
 	return w
 }
 
-// windowTitle is "<repository>[/<source>] · Godiff".
+// windowTitle is "<repository>[/<source>] · Diffscope".
 func windowTitle(root string, src source) string {
 	name := filepath.Base(root)
 	switch src.kind {
@@ -325,7 +325,7 @@ func windowTitle(root string, src source) string {
 		_, n := src.pull()
 		name += fmt.Sprintf("/#%d", n)
 	}
-	return name + " · Godiff"
+	return name + " · Diffscope"
 }
 
 func shortHash(h string) string {
@@ -1075,11 +1075,11 @@ func probeMainThread(d time.Duration) {
 	log.Printf("main thread: worst wait %v, average %v, %d of %d waits over 16ms", worst, total/time.Duration(max(n, 1)), slow, n)
 }
 
-// watchMainThread logs, for GODIFF_DEBUG, whenever the main thread keeps
+// watchMainThread logs, for DIFFSCOPE_DEBUG, whenever the main thread keeps
 // a function waiting over 30ms: when the window cannot respond.
 func watchMainThread() {
 	limit := 30 * time.Millisecond
-	if ms, err := strconv.Atoi(os.Getenv("GODIFF_DEBUG_BLOCK_MS")); err == nil {
+	if ms, err := strconv.Atoi(os.Getenv("DIFFSCOPE_DEBUG_BLOCK_MS")); err == nil {
 		limit = time.Duration(ms) * time.Millisecond
 	}
 	var gc debug.GCStats
