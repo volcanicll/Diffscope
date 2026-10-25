@@ -1,0 +1,54 @@
+# Release: push a tag like v0.1.0, and CI builds the macOS app and disk
+# image, then publishes them to a GitHub release.
+#
+# The build signs ad hoc, so Gatekeeper asks the user to confirm the first
+# open. With a Developer ID, set macos.signingIdentity in mygo.json and
+# secrets.MACOS_SIGNING_IDENTITY, MACOS_CERTIFICATE and
+# MACOS_CERTIFICATE_PASSWORD, and add macos.notarize for notarization.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    env:
+      VERSION: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set the version of the tag on mygo.json
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" mygo.json
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build the app and the disk image
+        run: go tool mygo build -platform darwin/universal
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Diffscope $VERSION" \
+            --generate-notes \
+            build/*.dmg
+        # For the in-app updater, generate a key pair with `go tool mygo
+        # keygen`, put the private key in the secret
+        # MYGO_UPDATER_PRIVATE_KEY, add the updates block of mygo.json, and
+        # upload what `go tool mygo build -upload` writes instead of the
+        # disk image alone.

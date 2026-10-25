@@ -139,6 +139,10 @@ go run ./tools/genicon    # render resources/icon.svg to the app icon
 go run ./tools/genfileicons <@pierre/trees package>  # update the file icons
 ```
 
+To release, push a tag: `git tag v0.1.0 && git push origin v0.1.0`. The
+Release workflow tests, builds the universal app and its disk image, and
+publishes them to a GitHub release, with the version of the tag.
+
 `DIFFSCOPE_SNAPSHOTS=<dir> go test .` saves PNGs of the views the tests drive, and
 `DIFFSCOPE_CAPTURE=<file.png>` makes the app save a picture of its window once
 loaded, then quit. `DIFFSCOPE_DEBUG=1` logs every git command with its duration, the
