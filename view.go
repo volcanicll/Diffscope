@@ -157,6 +157,9 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 			if w.source.kind == sourcePull {
 				w.reviewButton(c, pal)
 			}
+			if w.source.kind == sourceWorkingTree {
+				w.stageControl(c, pal)
+			}
 			w.groupControl(c, pal)
 			w.layoutControl(c, pal)
 		}
@@ -201,6 +204,29 @@ func (w *window) layoutControl(c *ui.Context, pal *palette) {
 		}
 	})
 
+}
+
+// stageControl switches the work tree's review between all the changes,
+// the staged ones, and the unstaged ones.
+func (w *window) stageControl(c *ui.Context, pal *palette) {
+	t := c.Theme()
+	seg := ui.SegmentedBase(c, &w.stageMode, 3)
+	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.1)).Label("Stage").Children(func() {
+		for i, name := range []string{"All", "Staged", "Unstaged"} {
+			s := seg.Segment(i).Height(24).Padding(0, 8).Radius(6).Center().Label(name).Tooltip(name).TextColor(t.TextMuted)
+			if i == w.stageMode {
+				s.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)
+			}
+			mode := i
+			s.OnClick(func() {
+				if mode != w.stageMode {
+					w.stageMode = mode
+					w.load()
+				}
+			})
+			s.Children(func() { ui.Text(c, name).FontSize(11).FontWeight(600) })
+		}
+	})
 }
 
 // mainArea shows the review, the commit view, or why there is nothing,

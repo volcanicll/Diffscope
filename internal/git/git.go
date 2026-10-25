@@ -209,9 +209,82 @@ func (r *Repo) WorkingTree(opts Options) ([]*diff.File, error) {
 	}
 	files = append(files, untracked...)
 	r.markConflicts(files)
+	r.markStaged(files)
 	r.markGenerated(files, "")
 	SortFiles(files)
 	return files, nil
+}
+
+// Staged returns the changes of the index against HEAD.
+func (r *Repo) Staged(opts Options) ([]*diff.File, error) {
+	base := "HEAD"
+	if !r.HasHead() {
+		base = EmptyTree
+	}
+	args := append(diffArgs(opts), "--cached", base, "--")
+	out, err := r.Git(args...)
+	if err != nil {
+		return nil, err
+	}
+	files := diff.Parse(out)
+	r.markConflicts(files)
+	r.markGenerated(files, "")
+	SortFiles(files)
+	return files, nil
+}
+
+// Unstaged returns the changes of the work tree against the index,
+// untracked files included.
+func (r *Repo) Unstaged(opts Options) ([]*diff.File, error) {
+	args := append(diffArgs(opts), "--")
+	out, err := r.Git(args...)
+	if err != nil {
+		return nil, err
+	}
+	files := diff.Parse(out)
+	untracked, err := r.untrackedFiles()
+	if err != nil {
+		return nil, err
+	}
+	files = append(files, untracked...)
+	r.markConflicts(files)
+	r.markGenerated(files, "")
+	SortFiles(files)
+	return files, nil
+}
+
+// IndexRev is the revision expression of a file's index version.
+const IndexRev = ":0"
+
+// markStaged marks each file with which of the index and the work tree
+// changed it, from git status --porcelain.
+func (r *Repo) markStaged(files []*diff.File) {
+	out, err := r.Git("-c", "core.quotePath=false", "status", "--porcelain", "--")
+	if err != nil {
+		return
+	}
+	staged, unstaged := map[string]bool{}, map[string]bool{}
+	for _, line := range strings.Split(string(out), "\n") {
+		if len(line) < 4 {
+			continue
+		}
+		x, y, path := line[0], line[1], line[3:]
+		if i := strings.Index(path, " -> "); i >= 0 {
+			path = path[i+4:] // the new path of a rename
+		}
+		if x != ' ' && x != '?' {
+			staged[path] = true
+		}
+		if y != ' ' {
+			unstaged[path] = true
+		}
+	}
+	for _, f := range files {
+		f.Staged, f.Unstaged = staged[f.Path], unstaged[f.Path]
+		if f.Status == diff.Untracked {
+			f.Unstaged = true
+		}
+	}
 }
 
 // maxUntracked is the number of untracked files listed one by one.

@@ -94,6 +94,11 @@ type File struct {
 	Generated bool
 	// Note explains why the lines are not shown, if they are not.
 	Note string
+	// Staged and Unstaged say which parts of the file changed: the
+	// index holds a change of it, the work tree does, or both. Only
+	// the work tree's review marks them.
+	Staged   bool
+	Unstaged bool
 	// Fingerprint identifies the content of the change: viewed files are
 	// remembered by it, and show again once it changes.
 	Fingerprint string

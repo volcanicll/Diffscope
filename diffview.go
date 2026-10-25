@@ -270,6 +270,17 @@ func (w *window) fileHeader(c *ui.Context, pal *palette, idx int, f *fileState, 
 			ui.Text(c, "Generated").FontSize(11).FontWeight(600).Padding(4, 9).Radius(14).
 				Background(pal.ref.Alpha(0.15)).TextColor(pal.ref).Shrink(0)
 		}
+		// What the index holds, when the review shows all the changes:
+		// a file staged alone, or one with more changes in the work tree.
+		if w.source.kind == sourceWorkingTree && w.stageMode == stageAll && f.Staged {
+			label := "Staged"
+			if f.Unstaged {
+				label = "Staged + Unstaged"
+			}
+			ui.Text(c, label).FontSize(11).FontWeight(600).Padding(4, 9).Radius(14).
+				Background(pal.viewed.Alpha(0.15)).TextColor(pal.viewed).Shrink(0).
+				Tooltip("The index holds changes of this file" + map[bool]string{true: ", and so does the work tree", false: ""}[f.Unstaged])
+		}
 		if n := w.openThreads(f.Path); n > 0 {
 			ui.Row(c).Gap(4).Padding(4, 9).Radius(14).Background(pal.pill).TextColor(t.TextMuted).Shrink(0).
 				Tooltip(plural(n, "unresolved thread")).Children(func() {

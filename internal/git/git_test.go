@@ -124,3 +124,68 @@ func TestWorkingTreeAndCommit(t *testing.T) {
 		t.Errorf("missing %q %v", data, err)
 	}
 }
+
+func TestStagedAndUnstaged(t *testing.T) {
+	dir, r := newRepo(t)
+	// a.txt staged alone, b.go staged with more in the work tree, c.go
+	// unstaged alone, and d.md untracked.
+	write(t, dir, "a.txt", "staged\n")
+	write(t, dir, "src/b.go", "package b\nstaged\n")
+	gitIn(t, dir, "add", ".")
+	write(t, dir, "src/b.go", "package b\nstaged\nunstaged\n")
+	write(t, dir, "c.txt", "unstaged\n")
+	write(t, dir, "d.md", "new\n")
+
+	working, err := r.WorkingTree(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath := map[string]*diff.File{}
+	for _, f := range working {
+		byPath[f.Path] = f
+	}
+	if f := byPath["a.txt"]; !f.Staged || f.Unstaged {
+		t.Errorf("a.txt: staged %v, unstaged %v", f.Staged, f.Unstaged)
+	}
+	if f := byPath["src/b.go"]; !f.Staged || !f.Unstaged {
+		t.Errorf("src/b.go: staged %v, unstaged %v", f.Staged, f.Unstaged)
+	}
+	if f := byPath["c.txt"]; f.Staged || !f.Unstaged {
+		t.Errorf("c.txt: staged %v, unstaged %v", f.Staged, f.Unstaged)
+	}
+
+	staged, err := r.Staged(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, f := range staged {
+		got[f.Path] = true
+	}
+	if !got["a.txt"] || !got["src/b.go"] || got["c.txt"] || got["d.md"] {
+		t.Errorf("staged: %v", got)
+	}
+
+	unstaged, err := r.Unstaged(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = map[string]bool{}
+	for _, f := range unstaged {
+		got[f.Path] = true
+	}
+	if got["a.txt"] || !got["src/b.go"] || !got["c.txt"] || !got["d.md"] {
+		t.Errorf("unstaged: %v", got)
+	}
+
+	// The index holds the staged version of b.go, not the work tree's.
+	c, err := r.NewContents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	data, err := c.Read(IndexRev, "src/b.go")
+	if err != nil || string(data) != "package b\nstaged\n" {
+		t.Errorf("index version %q %v", data, err)
+	}
+}

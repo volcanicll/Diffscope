@@ -37,6 +37,13 @@ type source struct {
 	ref  string // the commit, the branch, or the pull request as owner/repo#123
 }
 
+// What part of the work tree's changes the review shows.
+const (
+	stageAll = iota // the index and the work tree against HEAD
+	stageStaged     // the index against HEAD
+	stageUnstaged   // the work tree against the index
+)
+
 // historyPage is how many commits the History tab loads at a time: git
 // lists hundreds in a few milliseconds, and the list builds only the rows
 // in view.
@@ -146,6 +153,9 @@ type window struct {
 	// The groups of the files: by kind, or as an agent's review has them.
 	groupPref groupMode
 	groups    []fileGroup
+	// stageMode is what part of the work tree's changes the review shows:
+	// all of them, the staged ones, or the unstaged ones.
+	stageMode int
 	// notes are the notes of the agent's review, by path, and noteSel the
 	// one gone to last.
 	notes   map[string][]*aiNote
@@ -535,7 +545,14 @@ func (w *window) load() {
 		switch src.kind {
 		case sourceWorkingTree:
 			sig = w.repo.StatusSignature()
-			files, err = w.repo.WorkingTree(opts)
+			switch w.stageMode {
+			case stageStaged:
+				files, err = w.repo.Staged(opts)
+			case stageUnstaged:
+				files, err = w.repo.Unstaged(opts)
+			default:
+				files, err = w.repo.WorkingTree(opts)
+			}
 		case sourceCommit:
 			if commit == nil {
 				var c git.Commit
@@ -557,8 +574,15 @@ func (w *window) load() {
 		var oldRev, newRev string
 		switch src.kind {
 		case sourceWorkingTree:
-			if w.repo.HasHead() {
-				oldRev = "HEAD"
+			switch w.stageMode {
+			case stageStaged: // the index against HEAD
+				oldRev, newRev = "HEAD", git.IndexRev
+			case stageUnstaged: // the work tree against the index
+				oldRev = git.IndexRev
+			default:
+				if w.repo.HasHead() {
+					oldRev = "HEAD"
+				}
 			}
 		case sourceCommit:
 			if commit != nil && len(commit.Parents) > 0 {
