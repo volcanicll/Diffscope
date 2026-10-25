@@ -128,7 +128,10 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 		}
 		ui.Spacer(c)
 		if !w.commitOpen {
-			// Find, the comments, and the layout.
+			// Open another repository, and find, the comments, the layout.
+			if iconButton(c, iconFolderOpen, "Open Folder… (⌘O)").Clicked() {
+				openFolder()
+			}
 			if iconButton(c, iconSearch, "Find in diffs (⌘F)").Clicked() {
 				w.finding = !w.finding
 			}
