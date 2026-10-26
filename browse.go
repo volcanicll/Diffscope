@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/godiff/internal/diff"
-	"github.com/egoist/godiff/internal/fileicon"
-	"github.com/egoist/godiff/internal/highlight"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/volcanicll/diffscope/internal/diff"
+	"github.com/volcanicll/diffscope/internal/fileicon"
+	"github.com/volcanicll/diffscope/internal/highlight"
 )
 
 // browseMaxLines is how many lines of a file the browser shows.
@@ -219,7 +219,7 @@ func (w *window) showBrowse(path string) {
 	w.browse = path
 	w.browseList = ui.ListState{}
 	w.browseLoading = true
-	w.browseLines, w.browseSegs, w.browseImage = nil, nil, nil
+	w.browseLines, w.browseSegs, w.browseImage, w.browseSVG = nil, nil, nil, nil
 	w.browseFinding, w.browseQuery, w.browseMatchesFor = false, "", ""
 	w.browseMatches, w.browseMatch = nil, 0
 	w.rowsDirty = true
@@ -228,25 +228,30 @@ func (w *window) showBrowse(path string) {
 		// Decoding a picture takes the time of the read over, off the main
 		// thread.
 		var img *ui.Bitmap
-		if isImage(path) && len(data) > 0 && len(data) <= maxImage {
-			img, _ = ui.DecodeBitmap(data)
+		var svg *ui.SVG
+		if len(data) > 0 && len(data) <= maxImage {
+			if isImage(path) {
+				img, _ = ui.DecodeBitmap(data)
+			} else if isSVG(path) {
+				svg, _ = ui.ParseSVG(data)
+			}
 		}
 		w.update(func() {
 			if w.browse != path {
 				return
 			}
 			w.browseLoading = false
-			w.loadBrowse(data, img)
+			w.loadBrowse(data, img, svg)
 		})
 	})
 }
 
 // loadBrowse decodes the bytes of the browsed file into highlighted lines,
-// or keeps the picture it holds.
-func (w *window) loadBrowse(data []byte, img *ui.Bitmap) {
-	w.browseImage, w.browseSize = img, len(data)
+// or keeps the picture it holds. An SVG that does not parse shows as text.
+func (w *window) loadBrowse(data []byte, img *ui.Bitmap, svg *ui.SVG) {
+	w.browseImage, w.browseSVG, w.browseSize = img, svg, len(data)
 	switch {
-	case img != nil: // the picture shows in place of the lines
+	case img != nil || svg != nil: // the picture shows in place of the lines
 	case data == nil || diff.IsBinary(data):
 		w.browseBinary, w.browseLines, w.browseSegs = true, nil, nil
 	default:
@@ -350,16 +355,29 @@ func (w *window) browseView(c *ui.Context, pal *palette) {
 		switch {
 		case w.browseLoading:
 			thinking(c, "Reading…")
-		case w.browseImage != nil:
-			iw, ih := w.browseImage.Size()
+		case w.browseImage != nil || w.browseSVG != nil:
+			var iw, ih float32
+			if w.browseImage != nil {
+				bw, bh := w.browseImage.Size()
+				iw, ih = float32(bw), float32(bh)
+			} else {
+				iw, ih = w.browseSVG.Size()
+			}
+			if iw <= 0 || ih <= 0 {
+				iw, ih = 256, 256
+			}
 			scale := min(float32(1), 480/float32(max(ih, 1)))
 			ui.Column(c).Grow(1).Center().Padding(16).Gap(10).Children(func() {
-				ui.Box(c).Size(float32(iw)*scale, float32(ih)*scale).MaxWidthPercent(100).Radius(4).
+				ui.Box(c).Size(iw*scale, ih*scale).MaxWidthPercent(100).Radius(4).
 					Border(1, pal.cardBorder).Clip().Stripes(ui.RGBA(127, 127, 127, 0.12), 6, 6, 45).
 					Children(func() {
-					ui.Image(c, w.browseImage).Fill()
-				})
-				ui.Textf(c, "%d×%d · %s", iw, ih, formatBytes(w.browseSize)).FontSize(11).TextColor(t.TextMuted)
+						if w.browseImage != nil {
+							ui.Image(c, w.browseImage).Fill()
+						} else {
+							ui.Image(c, w.browseSVG).Fill()
+						}
+					})
+				ui.Textf(c, "%d×%d · %s", int(iw), int(ih), formatBytes(w.browseSize)).FontSize(11).TextColor(t.TextMuted)
 			})
 		case w.browseBinary:
 			title := "Binary file"

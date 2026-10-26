@@ -14,12 +14,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/egoist/godiff/internal/diff"
-	"github.com/egoist/godiff/internal/git"
-	"github.com/egoist/godiff/internal/github"
-	"github.com/egoist/godiff/internal/highlight"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/volcanicll/diffscope/internal/diff"
+	"github.com/volcanicll/diffscope/internal/git"
+	"github.com/volcanicll/diffscope/internal/github"
+	"github.com/volcanicll/diffscope/internal/highlight"
 )
 
 // sourceKind is what a window reviews.
@@ -175,6 +175,7 @@ type window struct {
 	browseLines     []string
 	browseSegs      [][]highlight.Seg
 	browseImage     *ui.Bitmap
+	browseSVG       *ui.SVG
 	browseSize      int // of the browsed picture, in bytes
 	// The find bar of the file browser.
 	browseFinding    bool
@@ -892,6 +893,11 @@ func isImage(path string) bool {
 		return true
 	}
 	return false
+}
+
+// isSVG reports whether a path is of an SVG picture the app shows.
+func isSVG(path string) bool {
+	return strings.ToLower(filepath.Ext(path)) == ".svg"
 }
 
 // loadContents reads both sides of the files, for their colors and their
