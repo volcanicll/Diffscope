@@ -14,14 +14,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egoist/godiff/internal/git"
 	"github.com/egoist/mygo/ui"
+	"github.com/volcanicll/diffscope/internal/git"
 )
 
 func TestMain(m *testing.M) {
 	// Keep the user's settings out of the tests, and the tests' out of them.
 	dir, _ := os.MkdirTemp("", "diffscope-config")
-	cfg.path = filepath.Join(dir, "godiff.jsonc")
+	cfg.path = filepath.Join(dir, "diffscope.jsonc")
 	cfg.settings = defaultSettings()
 	code := m.Run()
 	os.RemoveAll(dir)
@@ -440,6 +440,55 @@ func TestWelcomeRecent(t *testing.T) {
 	}
 }
 
+// TestWelcomeText checks the welcome panel's words are built, not left as
+// the literals of a concatenation.
+func TestWelcomeText(t *testing.T) {
+	state.mu.Lock()
+	old := state.data.Recent
+	state.data.Recent = nil
+	state.mu.Unlock()
+	t.Cleanup(func() {
+		state.mu.Lock()
+		state.data.Recent = old
+		state.mu.Unlock()
+	})
+
+	tt := ui.NewTester((&welcome{err: git.ErrNotRepository}).view, 640, 420)
+	tt.Frame()
+	texts := strings.Join(tt.Texts(), "\n")
+	if !strings.Contains(texts, appName+" was opened outside a Git repository") {
+		t.Errorf("no %q in %q", appName+" was opened outside", texts)
+	}
+	if strings.Contains(texts, "' + ") {
+		t.Errorf("unbuilt concatenation in %q", texts)
+	}
+}
+
+// TestWelcomeRecentMany checks a list longer than the window scrolls
+// rather than drawing over the panel.
+func TestWelcomeRecentMany(t *testing.T) {
+	state.mu.Lock()
+	old := state.data.Recent
+	recent := make([]string, 0, maxRecent)
+	for i := range maxRecent {
+		recent = append(recent, fmt.Sprintf("/repo/%d", i))
+	}
+	state.data.Recent = recent
+	state.mu.Unlock()
+	t.Cleanup(func() {
+		state.mu.Lock()
+		state.data.Recent = old
+		state.mu.Unlock()
+	})
+
+	tt := ui.NewTester((&welcome{err: git.ErrNotRepository}).view, 640, 420)
+	tt.Frame()
+	if !tt.HasText("Recent repositories") {
+		t.Fatalf("no recents in %q", tt.Texts())
+	}
+	snapshot(t, tt, "welcome-recent-many")
+}
+
 func TestHorizontalScroll(t *testing.T) {
 	dir := testRepo(t)
 	writeFile(t, dir, "main.go", strings.Replace(mainGo, `"Hello, " + name`, `"Hello, " + name + "`+strings.Repeat("long ", 80)+`"`, 1))
@@ -628,7 +677,29 @@ func TestBrowseImage(t *testing.T) {
 		t.Errorf("no %q in %q", want, tt.Texts())
 	}
 	snapshot(t, tt, "browse-image")
-	// A text file still browses as lines, a picture without a size limit.
+
+	// An SVG shows in its own colors, at its viewBox size.
+	writeFile(t, dir, "banner.svg", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60"><rect width="120" height="60" fill="#33691e"/></svg>`)
+	w.showBrowse("banner.svg")
+	tt.Frame()
+	if w.browseSVG == nil || w.browseImage != nil || w.browseBinary {
+		t.Fatalf("no svg: %+v, binary %v", w.browseSVG, w.browseBinary)
+	}
+	tt.Frame()
+	sw, sh := w.browseSVG.Size()
+	want = fmt.Sprintf("%d×%d · %s", int(sw), int(sh), formatBytes(w.browseSize))
+	if !tt.HasText(want) {
+		t.Errorf("no %q in %q", want, tt.Texts())
+	}
+	snapshot(t, tt, "browse-svg")
+
+	// An SVG that does not parse falls back to its text.
+	writeFile(t, dir, "bad.svg", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0`)
+	w.showBrowse("bad.svg")
+	tt.Frame()
+	if w.browseSVG != nil || w.browseBinary || len(w.browseLines) == 0 {
+		t.Fatalf("bad svg: svg %v, binary %v, %d lines", w.browseSVG, w.browseBinary, len(w.browseLines))
+	}
 }
 
 func TestRepoTree(t *testing.T) {

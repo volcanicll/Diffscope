@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/godiff/internal/git"
 	"github.com/egoist/mygo/ui"
+	"github.com/volcanicll/diffscope/internal/git"
 )
 
 func (w *window) view(c *ui.Context) {
@@ -380,20 +380,26 @@ func (w *window) commitMessage(c *ui.Context, pal *palette) ui.Element {
 	})
 }
 
-// emptyPanel says why there is nothing to show.
-func emptyPanel(c *ui.Context, pal *palette, title, detail string, actions func()) {
+// emptyCard is the panel that says why there is nothing to show.
+func emptyCard(c *ui.Context, pal *palette, title, detail string, actions func()) {
 	t := c.Theme()
+	ui.Column(c).MaxWidth(520).Padding(28).Gap(10).Radius(16).Background(pal.headerBg).Border(1, pal.cardBorder).AlignItems(ui.Center).Children(func() {
+		ui.Icon(c, iconFileDiff).FontSize(28).TextColor(t.TextMuted)
+		ui.Text(c, title).FontSize(15).Bold().TextAlign(ui.Center)
+		if detail != "" {
+			ui.Text(c, detail).FontSize(13).Font("SF Mono, Menlo, monospace").TextColor(t.TextMuted).TextAlign(ui.Center).Selectable()
+		}
+		if actions != nil {
+			ui.Row(c).Gap(8).Margin(6, 0, 0).Children(actions)
+		}
+	})
+}
+
+// emptyPanel says why there is nothing to show, centered in the space it
+// takes.
+func emptyPanel(c *ui.Context, pal *palette, title, detail string, actions func()) {
 	ui.Column(c).Grow(1).Center().Padding(24).Children(func() {
-		ui.Column(c).MaxWidth(520).Padding(28).Gap(10).Radius(16).Background(pal.headerBg).Border(1, pal.cardBorder).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, iconFileDiff).FontSize(28).TextColor(t.TextMuted)
-			ui.Text(c, title).FontSize(15).Bold().TextAlign(ui.Center)
-			if detail != "" {
-				ui.Text(c, detail).FontSize(13).Font("SF Mono, Menlo, monospace").TextColor(t.TextMuted).TextAlign(ui.Center).Selectable()
-			}
-			if actions != nil {
-				ui.Row(c).Gap(8).Margin(6, 0, 0).Children(actions)
-			}
-		})
+		emptyCard(c, pal, title, detail, actions)
 	})
 }
 
@@ -473,15 +479,17 @@ func (v *welcome) view(c *ui.Context) {
 		title, detail = "Unable to read repository", errorText(v.err)
 	} else if v.err != nil {
 		title = "No Git repository found"
-		detail = "' + appName + ' was opened outside a Git repository. Run ' + cliName + ' from inside a repository, or choose File → Open Folder… to open one. You can also drop a folder on this window."
+		detail = appName + " was opened outside a Git repository. Run " + cliName + " from inside a repository, or choose File → Open Folder… to open one. You can also drop a folder on this window."
 	}
-	ui.Column(c).Grow(1).Children(func() {
-		emptyPanel(c, pal, title, detail, func() {
-			if ui.PrimaryButton(c, "Open Folder…").Clicked() {
-				openFolder()
-			}
+	ui.Scroll(c).Grow(1).Children(func() {
+		ui.Column(c).FillWidth().Margin(0, ui.Auto).MaxWidth(568).Padding(24, 24, 24).Gap(16).Children(func() {
+			emptyCard(c, pal, title, detail, func() {
+				if ui.PrimaryButton(c, "Open Folder…").Clicked() {
+					openFolder()
+				}
+			})
+			welcomeRecent(c, t)
 		})
-		welcomeRecent(c, t)
 	})
 }
 
@@ -492,7 +500,7 @@ func welcomeRecent(c *ui.Context, t *ui.Theme) {
 	if len(recent) == 0 {
 		return
 	}
-	ui.Column(c).Shrink(1).MaxWidth(520).Padding(0, 28, 24).Gap(2).Children(func() {
+	ui.Column(c).Gap(2).Children(func() {
 		ui.Text(c, "Recent repositories").FontSize(11).TextColor(t.TextMuted).Padding(0, 10, 4)
 		for _, root := range recent {
 			row := ui.Row(c).Height(30).Padding(0, 10).Gap(8).Radius(6).MinWidth(0)
