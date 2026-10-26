@@ -41,10 +41,14 @@ func load() {
 
 // For returns the icon of a file, by its path: by its whole name, as
 // Dockerfile, else by its extensions, the longest first, as .d.ts before
-// .ts.
+// .ts. Files of no kind known, and kinds the data has no icon for, get the
+// default icon.
 func For(path string) *Icon {
 	once.Do(load)
-	return icons[Token(path)]
+	if i := icons[Token(path)]; i != nil {
+		return i
+	}
+	return icons["default"]
 }
 
 // Token returns the kind of a file, by its path.

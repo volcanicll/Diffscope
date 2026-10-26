@@ -19,7 +19,9 @@ import (
 )
 
 var (
-	symbolRe = regexp.MustCompile("(?s)const sym_\\w+ = `(<symbol id=\"file-tree-builtin-([\\w-]+)\"[^>]*>.*?</symbol>)`;")
+	// Symbols are mostly constants of their own, but a few sit inline in the
+	// array that lists them, as zip does.
+	symbolRe = regexp.MustCompile("(?s)<symbol id=\"file-tree-builtin-([\\w-]+)\"[^>]*>.*?</symbol>")
 	entryRe  = regexp.MustCompile(`^\s*"?([^":]+)"?: "([\w-]+)",?$`)
 	// --trees-file-icon-color-go: var(--trees-file-icon-color, var(--trees-icon-cyan));
 	colorRe = regexp.MustCompile(`--trees-file-icon-color-([\w-]+): var\([^,]+, var\(--trees-icon-(\w+)\)\);`)
@@ -72,10 +74,10 @@ func main() {
 	src := string(js)
 	symbols := map[string]string{}
 	for _, m := range symbolRe.FindAllStringSubmatch(src, -1) {
-		svg := strings.Replace(m[1], "<symbol", `<svg xmlns="http://www.w3.org/2000/svg"`, 1)
-		svg = strings.Replace(svg, fmt.Sprintf(` id="file-tree-builtin-%s"`, m[2]), "", 1)
+		svg := strings.Replace(m[0], "<symbol", `<svg xmlns="http://www.w3.org/2000/svg"`, 1)
+		svg = strings.Replace(svg, fmt.Sprintf(` id="file-tree-builtin-%s"`, m[1]), "", 1)
 		svg = strings.ReplaceAll(svg, "</symbol>", "</svg>")
-		symbols[m[2]] = svg
+		symbols[m[1]] = svg
 	}
 	if symbols["default"] == "" {
 		log.Fatal("no default icon")

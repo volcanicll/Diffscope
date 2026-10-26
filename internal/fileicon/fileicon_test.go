@@ -42,3 +42,29 @@ func TestIcons(t *testing.T) {
 		t.Errorf("go icon %+v", i)
 	}
 }
+
+// TestEveryTokenHasIcon keeps a token of byName, byExtension or overrides
+// from naming an icon the data lacks, as zip did: drawing such a file would
+// dereference a nil icon.
+func TestEveryTokenHasIcon(t *testing.T) {
+	once.Do(load)
+	for _, m := range []struct {
+		name   string
+		tokens map[string]string
+	}{{"byName", byName}, {"byExtension", byExtension}, {"overrides", overrides}} {
+		for key, token := range m.tokens {
+			if icons[token] == nil {
+				t.Errorf("%s[%q] is %q, which has no icon", m.name, key, token)
+			}
+		}
+	}
+}
+
+func TestUnknownKindGetsDefault(t *testing.T) {
+	if i := For("dist/dist.tar.gz"); i == nil || i.Token != "zip" {
+		t.Errorf("archive icon: %+v", i)
+	}
+	if i := For("x.unknown-kind"); i == nil || i.Token != "default" {
+		t.Errorf("unknown icon: %+v", i)
+	}
+}
