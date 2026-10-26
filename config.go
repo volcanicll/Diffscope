@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egoist/godiff/internal/agent"
 	"github.com/egoist/mygo"
+	"github.com/volcanicll/diffscope/internal/agent"
 )
 
-// Settings are the user's preferences, in ~/.godiff/godiff.jsonc as
+// Settings are the user's preferences, in ~/.diffscope/diffscope.jsonc.
 
 type Settings struct {
 	CodeFontFamily      string `json:"codeFontFamily"`
@@ -92,7 +92,7 @@ var cfg = newConfig()
 
 func newConfig() *config {
 	home, _ := os.UserHomeDir()
-	c := &config{path: filepath.Join(home, ".godiff", "godiff.jsonc"), settings: defaultSettings()}
+	c := &config{path: filepath.Join(home, ".diffscope", "diffscope.jsonc"), settings: defaultSettings()}
 	c.load()
 	return c
 }

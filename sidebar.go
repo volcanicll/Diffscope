@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/godiff/internal/diff"
-	"github.com/egoist/godiff/internal/git"
 	"github.com/egoist/mygo/ui"
+	"github.com/volcanicll/diffscope/internal/diff"
+	"github.com/volcanicll/diffscope/internal/git"
 )
 
 // treeNode is a row of the file tree: a file, or a directory with the
@@ -80,7 +80,7 @@ func (w *window) fileNote(f *fileState) string {
 	case f.Binary:
 		return "Binary file changed."
 	case f.TooLarge:
-		return "File is too large, so ' + appName + ' skipped rendering it."
+		return "File is too large, so " + appName + " skipped rendering it."
 	case len(f.Hunks) == 0 && f.OldPath != f.Path:
 		return "File renamed without changes."
 	case len(f.Hunks) == 0 && f.ModeChange != "":

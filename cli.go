@@ -48,10 +48,10 @@ func appBundle() string {
 // runs in, as the terminal helper does.
 func cliScript() string {
 	if bundle := appBundle(); bundle != "" && runtime.GOOS == "darwin" {
-		return fmt.Sprintf("#!/bin/sh\n# Reviews the changes of the Git repository here with ' + appName + '.\nexec open -n -a %q --args --cwd \"$PWD\" \"$@\"\n", bundle)
+		return fmt.Sprintf("#!/bin/sh\n# Reviews the changes of the Git repository here with %s.\nexec open -n -a %q --args --cwd \"$PWD\" \"$@\"\n", appName, bundle)
 	}
 	exe, _ := os.Executable()
-	return fmt.Sprintf("#!/bin/sh\n# Reviews the changes of the Git repository here with ' + appName + '.\n%q --cwd \"$PWD\" \"$@\" >/dev/null 2>&1 &\n", exe)
+	return fmt.Sprintf("#!/bin/sh\n# Reviews the changes of the Git repository here with %s.\n%q --cwd \"$PWD\" \"$@\" >/dev/null 2>&1 &\n", appName, exe)
 }
 
 // installCLI writes the diffscope command into a directory of the PATH.
