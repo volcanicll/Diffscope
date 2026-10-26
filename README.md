@@ -99,7 +99,7 @@ last, and **File → Open Recent** lists the ten opened lately.
 
 ## Configuration
 
-Settings live in `~/.diffscope/godiff.jsonc` (**Diffscope → Open Config File…**),
+Settings live in `~/.diffscope/diffscope.jsonc` (**Diffscope → Open Config File…**),
 and apply to open windows as the file changes:
 
 ```jsonc
