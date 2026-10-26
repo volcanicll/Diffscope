@@ -174,6 +174,14 @@ type window struct {
 	browseTruncated bool
 	browseLines     []string
 	browseSegs      [][]highlight.Seg
+	browseImage     *ui.Bitmap
+	browseSize      int // of the browsed picture, in bytes
+	// The find bar of the file browser.
+	browseFinding    bool
+	browseQuery      string
+	browseMatches    []browseMatch
+	browseMatch      int
+	browseMatchesFor string
 	// notes are the notes of the agent's review, by path, and noteSel the
 	// one gone to last.
 	notes   map[string][]*aiNote

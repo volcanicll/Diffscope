@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -573,6 +574,61 @@ func TestFileIcons(t *testing.T) {
 			t.Errorf("%s: icon %+v, want %s", f.Path, f.kind, token)
 		}
 	}
+}
+
+func TestBrowseFind(t *testing.T) {
+	w, tt := newTestWindow(t, testRepo(t))
+	w.showBrowse("main.go")
+	tt.Frame()
+	if w.browseLoading || len(w.browseLines) == 0 {
+		t.Fatalf("browse not loaded: %d lines", len(w.browseLines))
+	}
+	w.browseFinding = true
+	tt.Frame()
+	tt.Type("greet")
+	tt.Frame()
+	// "greet" is on two lines: the definition and the call in main.
+	if len(w.browseMatches) != 2 {
+		t.Fatalf("matches %d for %q", len(w.browseMatches), w.browseQuery)
+	}
+	line := int(w.browseMatches[w.browseMatch].line)
+	marks := w.browseMarks(line, &lightPalette)
+	if len(marks) != 1 || w.browseLines[line][marks[0].Start:marks[0].End] != "greet" {
+		t.Errorf("marks %+v on %q", marks, w.browseLines[line])
+	}
+	// Other lines show theirs dimmed, not as the current match.
+	w.showBrowseMatch()
+	if w.browseMatch != 0 {
+		t.Errorf("match %d", w.browseMatch)
+	}
+	// Closing the find clears the query and the matches.
+	w.browseFinding = false
+	w.updateBrowseMatches()
+	if w.browseQuery != "" || w.browseMatches != nil {
+		t.Errorf("find left open: %q, %d matches", w.browseQuery, len(w.browseMatches))
+	}
+}
+
+func TestBrowseImage(t *testing.T) {
+	dir := testRepo(t)
+	writeFile(t, dir, "logo.png", pngOf(t, 64, 48, color.NRGBA{200, 40, 40, 255}))
+	w, tt := newTestWindow(t, dir)
+	w.showBrowse("logo.png")
+	tt.Frame()
+	if w.browseLoading {
+		t.Fatal("browse still loading")
+	}
+	if w.browseImage == nil || w.browseBinary {
+		t.Fatalf("no picture: %+v, binary %v", w.browseImage, w.browseBinary)
+	}
+	tt.Frame()
+	iw, ih := w.browseImage.Size()
+	want := fmt.Sprintf("%d×%d · %s", iw, ih, formatBytes(w.browseSize))
+	if !tt.HasText(want) {
+		t.Errorf("no %q in %q", want, tt.Texts())
+	}
+	snapshot(t, tt, "browse-image")
+	// A text file still browses as lines, a picture without a size limit.
 }
 
 func TestRepoTree(t *testing.T) {

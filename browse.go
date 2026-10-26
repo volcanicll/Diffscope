@@ -219,37 +219,111 @@ func (w *window) showBrowse(path string) {
 	w.browse = path
 	w.browseList = ui.ListState{}
 	w.browseLoading = true
-	w.browseLines, w.browseSegs = nil, nil
+	w.browseLines, w.browseSegs, w.browseImage = nil, nil, nil
+	w.browseFinding, w.browseQuery, w.browseMatchesFor = false, "", ""
+	w.browseMatches, w.browseMatch = nil, 0
 	w.rowsDirty = true
 	w.background(func() {
 		data := w.repo.ReadWorkTree(path)
+		// Decoding a picture takes the time of the read over, off the main
+		// thread.
+		var img *ui.Bitmap
+		if isImage(path) && len(data) > 0 && len(data) <= maxImage {
+			img, _ = ui.DecodeBitmap(data)
+		}
 		w.update(func() {
 			if w.browse != path {
 				return
 			}
 			w.browseLoading = false
-			w.loadBrowse(data)
+			w.loadBrowse(data, img)
 		})
 	})
 }
 
-// loadBrowse decodes the bytes of the browsed file into highlighted lines.
-func (w *window) loadBrowse(data []byte) {
-	if data == nil || diff.IsBinary(data) {
+// loadBrowse decodes the bytes of the browsed file into highlighted lines,
+// or keeps the picture it holds.
+func (w *window) loadBrowse(data []byte, img *ui.Bitmap) {
+	w.browseImage, w.browseSize = img, len(data)
+	switch {
+	case img != nil: // the picture shows in place of the lines
+	case data == nil || diff.IsBinary(data):
 		w.browseBinary, w.browseLines, w.browseSegs = true, nil, nil
-		w.rowsDirty = true
+	default:
+		w.browseBinary = false
+		lines := diff.SplitLines(string(data))
+		if len(lines) > browseMaxLines {
+			lines, w.browseTruncated = lines[:browseMaxLines], true
+		} else {
+			w.browseTruncated = false
+		}
+		w.browseLines = lines
+		w.browseSegs = highlight.Lines(w.browse, lines)
+	}
+	w.updateBrowseMatches()
+	w.rowsDirty = true
+}
+
+// browseMatch is a line of the browsed file holding the query of the find
+// bar.
+type browseMatch struct {
+	line int32
+}
+
+// searchingBrowse reports whether the browser's find bar is open with a
+// query.
+func (w *window) searchingBrowse() bool {
+	return w.browseFinding && strings.TrimSpace(w.browseQuery) != "" && w.browseLines != nil
+}
+
+// updateBrowseMatches finds the query in the lines of the browsed file.
+func (w *window) updateBrowseMatches() {
+	key := w.browseQuery
+	if !w.browseFinding {
+		key = ""
+	}
+	if key == w.browseMatchesFor {
 		return
 	}
-	w.browseBinary = false
-	lines := diff.SplitLines(string(data))
-	if len(lines) > browseMaxLines {
-		lines, w.browseTruncated = lines[:browseMaxLines], true
-	} else {
-		w.browseTruncated = false
+	w.browseMatchesFor = key
+	w.browseMatches, w.browseMatch = nil, 0
+	if key == "" {
+		w.browseQuery = ""
+		return
 	}
-	w.browseLines = lines
-	w.browseSegs = highlight.Lines(w.browse, lines)
-	w.rowsDirty = true
+	for li, l := range w.browseLines {
+		if len(findRanges(l, key)) > 0 {
+			w.browseMatches = append(w.browseMatches, browseMatch{line: int32(li)})
+		}
+	}
+}
+
+// showBrowseMatch scrolls the current match into the middle of the view.
+func (w *window) showBrowseMatch() {
+	if w.browseMatch < 0 || w.browseMatch >= len(w.browseMatches) {
+		return
+	}
+	w.browseList.ScrollTo(int(w.browseMatches[w.browseMatch].line), ui.Center)
+}
+
+// browseMarks are the backgrounds of the find bar's matches on a line.
+func (w *window) browseMarks(i int, pal *palette) []mark {
+	if !w.searchingBrowse() {
+		return nil
+	}
+	now := -1
+	if w.browseMatch < len(w.browseMatches) {
+		now = int(w.browseMatches[w.browseMatch].line)
+	}
+	var out []mark
+	for _, rg := range findRanges(w.browseLines[i], w.browseQuery) {
+		color := pal.match
+		if i == now {
+			color = pal.matchNow
+		}
+		out = append(out, mark{Range: rg, color: color})
+	}
+	return out
 }
 
 // browseView shows the file the browser has open.
@@ -266,6 +340,9 @@ func (w *window) browseView(c *ui.Context, pal *palette) {
 			kind := fileicon.For(path)
 			ui.Icon(c, kind.SVG).FontSize(15).TextColor(kind.Color(t.Dark)).Shrink(0)
 			ui.Text(c, path).Font(w.codeFont()).FontSize(12).SingleLine().MinWidth(0).Grow(1)
+			if iconButton(c, iconSearch, "Find in file (⌘F)").Clicked() {
+				w.browseFinding = !w.browseFinding
+			}
 			if iconButton(c, iconOpen, "Open file in editor (⌘⇧O)").Clicked() {
 				w.openInEditor(path, 1)
 			}
@@ -273,9 +350,34 @@ func (w *window) browseView(c *ui.Context, pal *palette) {
 		switch {
 		case w.browseLoading:
 			thinking(c, "Reading…")
+		case w.browseImage != nil:
+			iw, ih := w.browseImage.Size()
+			scale := min(float32(1), 480/float32(max(ih, 1)))
+			ui.Column(c).Grow(1).Center().Padding(16).Gap(10).Children(func() {
+				ui.Box(c).Size(float32(iw)*scale, float32(ih)*scale).MaxWidthPercent(100).Radius(4).
+					Border(1, pal.cardBorder).Clip().Stripes(ui.RGBA(127, 127, 127, 0.12), 6, 6, 45).
+					Children(func() {
+					ui.Image(c, w.browseImage).Fill()
+				})
+				ui.Textf(c, "%d×%d · %s", iw, ih, formatBytes(w.browseSize)).FontSize(11).TextColor(t.TextMuted)
+			})
 		case w.browseBinary:
-			emptyPanel(c, pal, "Binary file", path, nil)
+			title := "Binary file"
+			if isImage(path) {
+				title = "The image cannot be shown"
+			}
+			emptyPanel(c, pal, title, path, nil)
 		default:
+			find := ui.FindBar(c, &w.browseFinding, &w.browseQuery, len(w.browseMatches), &w.browseMatch).Label("Find in file")
+			if find.FocusWithin() {
+				w.typing = true
+			}
+			if w.browseQuery != w.browseMatchesFor && (w.browseFinding || w.browseMatchesFor != "") {
+				w.updateBrowseMatches()
+			}
+			if find.Changed() {
+				w.showBrowseMatch()
+			}
 			ui.List(c, &w.browseList, len(w.browseLines), func(i int) {
 				row := ui.Row(c).MinWidth(0).Padding(0, 12, 0, 8)
 				if row.Hovered() {
@@ -287,7 +389,7 @@ func (w *window) browseView(c *ui.Context, pal *palette) {
 						FontSize(float32(w.settings.CodeFontSize)).TextColor(t.TextMuted).
 						Width(float32(28 + 8*len(fmt.Sprintf("%d", len(w.browseLines))))).
 						TextAlign(ui.End).Shrink(0)
-					ui.RichText(c, codeSpans(w.browseLines[i], w.browseSegs[i], nil, pal)...).
+					ui.RichText(c, codeSpans(w.browseLines[i], w.browseSegs[i], w.browseMarks(i, pal), pal)...).
 						Font(w.codeFont()).FontSize(float32(w.settings.CodeFontSize)).SingleLine().MinWidth(0)
 				})
 			})
