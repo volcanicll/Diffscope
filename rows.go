@@ -1,11 +1,11 @@
 package main
 
 import (
-	"github.com/egoist/godiff/internal/diff"
-	"github.com/egoist/godiff/internal/fileicon"
-	"github.com/egoist/godiff/internal/github"
-	"github.com/egoist/godiff/internal/highlight"
 	"github.com/egoist/mygo/ui"
+	"github.com/volcanicll/diffscope/internal/diff"
+	"github.com/volcanicll/diffscope/internal/fileicon"
+	"github.com/volcanicll/diffscope/internal/github"
+	"github.com/volcanicll/diffscope/internal/highlight"
 )
 
 // fileState is a changed file as the review shows it: its change, the

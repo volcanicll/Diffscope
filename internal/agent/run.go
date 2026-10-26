@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/godiff/internal/proc"
-	"github.com/egoist/godiff/internal/shellenv"
+	"github.com/volcanicll/diffscope/internal/proc"
+	"github.com/volcanicll/diffscope/internal/shellenv"
 )
 
 // timeout bounds a run: the agents cap their own turns, and the user can

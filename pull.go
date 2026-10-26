@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egoist/godiff/internal/diff"
-	"github.com/egoist/godiff/internal/git"
-	"github.com/egoist/godiff/internal/github"
 	"github.com/egoist/mygo"
+	"github.com/volcanicll/diffscope/internal/diff"
+	"github.com/volcanicll/diffscope/internal/git"
+	"github.com/volcanicll/diffscope/internal/github"
 )
 
 // signInWithGH opens a terminal running gh auth login, for the token that

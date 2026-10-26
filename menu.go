@@ -3,8 +3,8 @@ package main
 import (
 	"runtime"
 
-	"github.com/egoist/godiff/internal/agent"
 	"github.com/egoist/mygo"
+	"github.com/volcanicll/diffscope/internal/agent"
 )
 
 // focused returns the review window with the focus, nil for none.

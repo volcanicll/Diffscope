@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egoist/godiff/internal/agent"
-	"github.com/egoist/godiff/internal/diff"
-	"github.com/egoist/godiff/internal/git"
-	"github.com/egoist/godiff/internal/github"
 	"github.com/egoist/mygo/ui"
+	"github.com/volcanicll/diffscope/internal/agent"
+	"github.com/volcanicll/diffscope/internal/diff"
+	"github.com/volcanicll/diffscope/internal/git"
+	"github.com/volcanicll/diffscope/internal/github"
 )
 
 func TestKindOf(t *testing.T) {

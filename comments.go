@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egoist/godiff/internal/diff"
+	"github.com/volcanicll/diffscope/internal/diff"
 )
 
 // side is the side of a diff a comment is on.

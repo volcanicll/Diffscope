@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/godiff/internal/diff"
-	"github.com/egoist/godiff/internal/highlight"
 	"github.com/egoist/mygo/ui"
+	"github.com/volcanicll/diffscope/internal/diff"
+	"github.com/volcanicll/diffscope/internal/highlight"
 )
 
 // cardRadius rounds the corners of the files' cards.

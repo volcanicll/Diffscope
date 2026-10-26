@@ -17,12 +17,12 @@ func TestParseRemote(t *testing.T) {
 		url  string
 		want string
 	}{
-		{"git@github.com:egoist/godiff.git", "egoist/godiff"},
-		{"https://github.com/egoist/godiff", "egoist/godiff"},
-		{"https://github.com/egoist/godiff.git", "egoist/godiff"},
+		{"git@github.com:volcanicll/diffscope.git", "volcanicll/diffscope"},
+		{"https://github.com/volcanicll/diffscope", "volcanicll/diffscope"},
+		{"https://github.com/volcanicll/diffscope.git", "volcanicll/diffscope"},
 		{"https://token@github.com/a-b/c.d.git", "a-b/c.d"},
-		{"ssh://git@github.com/egoist/godiff.git", "egoist/godiff"},
-		{"git@gitlab.com:egoist/godiff.git", ""},
+		{"ssh://git@github.com/volcanicll/diffscope.git", "volcanicll/diffscope"},
+		{"git@gitlab.com:volcanicll/diffscope.git", ""},
 		{"/srv/repos/app.git", ""},
 	} {
 		r, ok := ParseRemote(tc.url)
@@ -42,10 +42,10 @@ func TestParsePull(t *testing.T) {
 		repo string
 		n    int
 	}{
-		{"https://github.com/egoist/godiff/pull/12", "egoist/godiff", 12},
-		{"https://github.com/egoist/godiff/pull/12/files", "egoist/godiff", 12},
-		{"github.com/egoist/godiff/pull/3", "egoist/godiff", 3},
-		{"egoist/godiff#7", "egoist/godiff", 7},
+		{"https://github.com/volcanicll/diffscope/pull/12", "volcanicll/diffscope", 12},
+		{"https://github.com/volcanicll/diffscope/pull/12/files", "volcanicll/diffscope", 12},
+		{"github.com/volcanicll/diffscope/pull/3", "volcanicll/diffscope", 3},
+		{"volcanicll/diffscope#7", "volcanicll/diffscope", 7},
 		{"#42", "/", 42},
 	} {
 		repo, n, ok := ParsePull(tc.in)

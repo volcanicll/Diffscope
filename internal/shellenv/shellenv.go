@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egoist/godiff/internal/proc"
+	"github.com/volcanicll/diffscope/internal/proc"
 )
 
 var (

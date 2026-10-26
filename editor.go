@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egoist/godiff/internal/proc"
 	"github.com/egoist/mygo"
+	"github.com/volcanicll/diffscope/internal/proc"
 )
 
 var editorArgs = regexp.MustCompile(`"[^"]+"|'[^']+'|\S+`)

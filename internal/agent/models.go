@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/godiff/internal/proc"
-	"github.com/egoist/godiff/internal/shellenv"
+	"github.com/volcanicll/diffscope/internal/proc"
+	"github.com/volcanicll/diffscope/internal/shellenv"
 )
 
 // Model is a model an agent can review with.

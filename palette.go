@@ -3,10 +3,10 @@ package main
 import (
 	"strings"
 
-	"github.com/egoist/godiff/internal/agent"
-	"github.com/egoist/godiff/internal/github"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/volcanicll/diffscope/internal/agent"
+	"github.com/volcanicll/diffscope/internal/github"
 )
 
 // command is an action of the command bar.

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/godiff/internal/shellenv"
+	"github.com/volcanicll/diffscope/internal/shellenv"
 )
 
 // Agent is a coding agent's command line.

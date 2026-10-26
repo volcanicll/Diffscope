@@ -22,10 +22,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/egoist/godiff/internal/git"
-	"github.com/egoist/godiff/internal/github"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/volcanicll/diffscope/internal/git"
+	"github.com/volcanicll/diffscope/internal/github"
 )
 
 // appName is the user-facing name of the app, cliName the command that
