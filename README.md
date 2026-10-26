@@ -72,10 +72,12 @@ go run . [<commit> | <branch> | <pull request>] [<path>]
   repository's GitHub remote (`upstream`, else `origin`).
 - `diffscope ../other-repo` opens another repository.
 
-Every repository opens in a window of its own. **Diffscope → Install Command Line
-Tool…** installs a `diffscope` command that opens the app on the repository it
-runs in. Started from Finder or the Dock, the app reopens the repository opened
-last, and **File → Open Recent** lists the ten opened lately.
+Every repository opens in a window of its own, except **File → Open Folder…**
+from a review window, which asks whether the folder opens there or in a new
+window; a folder dropped on a window opens there. **Diffscope → Install Command
+Line Tool…** installs a `diffscope` command that opens the app on the repository
+it runs in. Started from Finder or the Dock, the app reopens the repository
+opened last, and **File → Open Recent** lists the ten opened lately.
 
 ### Keyboard
 

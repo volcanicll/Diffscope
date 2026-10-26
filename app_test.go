@@ -355,6 +355,62 @@ func TestHistoryTakesFocus(t *testing.T) {
 	}
 }
 
+func TestHistoryArchive(t *testing.T) {
+	// A commit with an archive in it: the file's icon was nil, which crashed
+	// the window as it drew the file tree.
+	dir := testRepo(t)
+	blob := make([]byte, 4096)
+	for i := range blob {
+		blob[i] = byte(i * 7 % 251)
+	}
+	blob[0], blob[1] = 0x1f, 0x8b // a gzip header
+	writeFile(t, dir, "dist/dist.tar.gz", string(blob))
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-q", "-m", "Ship dist.tar.gz")
+	hash := strings.TrimSpace(gitIn(t, dir, "rev-parse", "HEAD"))
+
+	w, tt := newTestWindow(t, dir)
+	w.setSource(source{kind: sourceCommit, ref: hash})
+	tt.Frame()
+	tt.Frame()
+	if w.commit == nil || w.commit.Subject != "Ship dist.tar.gz" {
+		t.Fatalf("commit %+v", w.commit)
+	}
+	var found bool
+	for _, f := range w.files {
+		if f.Path == "dist/dist.tar.gz" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("files %d, no dist.tar.gz", len(w.files))
+	}
+	if !tt.HasText("dist.tar.gz") || !tt.HasText("Binary file changed.") {
+		t.Errorf("texts %q", tt.Texts())
+	}
+}
+
+// TestSameRepo reports whether a window tells the repository it shows from
+// another.
+func TestSameRepo(t *testing.T) {
+	dir := testRepo(t)
+	other := testRepo(t)
+	repo, err := git.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := newWindow(repo, source{})
+	if !sameRepo(w, dir) {
+		t.Error("the repository it shows is another")
+	}
+	if sameRepo(w, other) {
+		t.Error("another repository is the one it shows")
+	}
+	if !sameRepo(w, filepath.Join(dir, "docs")) {
+		t.Error("a folder of it is another repository")
+	}
+}
+
 func TestPalette(t *testing.T) {
 	cfg.Update(func(s *Settings) { s.DiffStyle = "split" })
 	w, tt := newTestWindow(t, testRepo(t))

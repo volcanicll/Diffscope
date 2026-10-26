@@ -48,7 +48,7 @@ func (w *window) commands() []command {
 		{title: "Open Commit", hint: "Review a commit", run: func() { w.openDialog(dialogCommit) }},
 		{title: "Open Branch", hint: "Compare with a branch", run: func() { w.openDialog(dialogBranch) }},
 		{title: "Open Pull Request", hint: "Review a pull request on GitHub", run: func() { w.openDialog(dialogPull) }},
-		{title: "Open Folder", keys: "⌘O", run: openFolder},
+		{title: "Open Folder", hint: "In this window, or a new one", keys: "⌘O", run: func() { openFolderFrom(w) }},
 		{title: "Show File Tree", run: func() { w.tab, w.sidebarShown = 0, true }},
 		{title: "Show History", run: func() { w.tab, w.sidebarShown = 1, true }},
 		{title: "Show Pull Requests", keys: "⌘3", run: w.showPulls},

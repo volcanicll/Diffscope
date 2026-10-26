@@ -61,6 +61,8 @@ type window struct {
 	launch   source // what the window was opened on
 	source   source
 	settings Settings
+	// stop ends the watch of the repository shown.
+	stop chan struct{}
 
 	branch     string
 	files      []*fileState
@@ -237,39 +239,67 @@ var (
 	windows   []*window
 )
 
-// openWindow opens a window on the repository holding dir.
-func openWindow(dir string, src source) error {
+// existingWindow returns the window reviewing a source of the repository
+// at root, nil for none.
+func existingWindow(root string, src source) *window {
+	windowsMu.Lock()
+	defer windowsMu.Unlock()
+	for _, w := range windows {
+		if w.repo.Root == root && w.launch == src {
+			return w
+		}
+	}
+	return nil
+}
+
+// openRepo opens the repository holding dir, with the source resolved:
+// a commit's hash, a pull request's head.
+func openRepo(dir string, src source) (*git.Repo, source, error) {
 	repo, err := git.Open(dir)
 	if err != nil {
-		return err
+		return nil, src, err
 	}
 	if src.kind == sourceCommit {
 		hash, err := repo.Resolve(src.ref)
 		if err != nil {
-			return err
+			return nil, src, err
 		}
 		src.ref = hash
 	}
 	if src.kind == sourcePull {
 		ref, err := resolvePull(repo, src.ref)
 		if err != nil {
-			return err
+			return nil, src, err
 		}
 		src.ref = ref
 	}
-	// A repository already open comes to the front.
-	windowsMu.Lock()
-	for _, w := range windows {
-		if w.repo.Root == repo.Root && w.launch == src {
-			windowsMu.Unlock()
-			w.win.Show()
-			w.win.Focus()
-			return nil
-		}
+	return repo, src, nil
+}
+
+// openWindow opens a window on the repository holding dir.
+func openWindow(dir string, src source) error {
+	return openWindowIn(dir, src, nil)
+}
+
+// openWindowIn opens the repository holding dir in a new window, or in
+// the window given when it is not nil: that window closes once the new one
+// shows, in its place and its size.
+func openWindowIn(dir string, src source, into *window) error {
+	repo, src, err := openRepo(dir, src)
+	if err != nil {
+		return err
 	}
-	windowsMu.Unlock()
+	// A repository already open comes to the front.
+	if w := existingWindow(repo.Root, src); w != nil {
+		w.win.Show()
+		w.win.Focus()
+		return nil
+	}
 
 	w := newWindow(repo, src)
+	w.stop = make(chan struct{})
+	// The window it replaces keeps the frame, the bounds and the state of
+	// the window shown: the state key is the same.
 	w.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:          windowTitle(repo.Root, src),
 		Width:          1280,
@@ -285,7 +315,6 @@ func openWindow(dir string, src source) error {
 	windowsMu.Lock()
 	windows = append(windows, w)
 	windowsMu.Unlock()
-	stop := make(chan struct{})
 	w.win.OnClose(func(*mygo.CloseEvent) {
 		if w.settings.CopyCommentsOnClose && len(w.comments) > 0 {
 			mygo.Clipboard.WriteText(w.commentsMarkdown())
@@ -293,7 +322,7 @@ func openWindow(dir string, src source) error {
 	})
 	offSettings := cfg.OnChange(func(s Settings) { w.win.Update(func() { w.applySettings(s) }) })
 	w.win.OnClosed(func() {
-		close(stop)
+		close(w.stop)
 		offSettings()
 		windowsMu.Lock()
 		for i, o := range windows {
@@ -305,14 +334,19 @@ func openWindow(dir string, src source) error {
 		windowsMu.Unlock()
 	})
 	w.win.OnFocus(func() { go w.checkChanges() })
-	// A folder dropped on a review window opens a review of it.
+	// A folder dropped on a review window opens in place of the review it
+	// shows: the window is the one the user aimed at. Its comments would go
+	// with that review, so the window asks first when there are some.
 	w.win.OnFileDrop(func(e *mygo.FileDropEvent) {
 		for _, p := range e.Paths {
 			if info, err := os.Stat(p); err != nil || !info.IsDir() {
 				continue
 			}
 			go func(p string) {
-				if err := openWindow(p, source{kind: sourceWorkingTree}); err != nil {
+				if len(w.comments) > 0 && !sameRepo(w, p) && askWhere(w) != openHere {
+					return
+				}
+				if err := openWindowIn(p, source{kind: sourceWorkingTree}, w); err != nil {
 					mygo.Dialog.Error("Could not open the folder", errorText(err))
 				}
 			}(p)
@@ -323,8 +357,15 @@ func openWindow(dir string, src source) error {
 	w.load()
 	w.loadHistory()
 	w.loadUser()
-	go w.watch(stop)
+	go w.watch(w.stop)
 	w.captureIfAsked()
+	if into != nil && into.win != nil && !into.win.IsDestroyed() {
+		// The window it replaces goes once the new one shows: the app has
+		// a window all along.
+		w.win.Show()
+		w.win.Focus()
+		into.win.Close()
+	}
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/volcanicll/diffscope/internal/agent"
+	"github.com/volcanicll/diffscope/internal/git"
 )
 
 // focused returns the review window with the focus, nil for none.
@@ -52,7 +53,15 @@ func buildMenu() *mygo.Menu {
 			{Role: mygo.RoleQuit},
 		}},
 		{Label: "File", Submenu: []*mygo.MenuItem{
-			{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { openFolder() }},
+			{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: func(_ *mygo.MenuItem, win *mygo.Window) {
+				// From a review window, the folder opens in it or in one of
+				// its own, as the user chooses.
+				if w := focused(win); w != nil {
+					openFolderFrom(w)
+					return
+				}
+				openFolder()
+			}},
 			{Label: "Open Recent", Submenu: recentMenuItems()},
 			{Label: "Open Commit…", Accelerator: "CmdOrCtrl+Shift+C", Click: inWindow(func(w *window) { w.openDialog(dialogCommit) })},
 			{Label: "Open Branch…", Click: inWindow(func(w *window) { w.openDialog(dialogBranch) })},
@@ -186,17 +195,84 @@ func applyTheme(s Settings) {
 
 // openFolder asks for a repository and opens it.
 func openFolder() {
+	openFolderFrom(nil)
+}
+
+// openFolderFrom asks for a repository and opens it, in a new window or in
+// from, the review window it was asked from: with one open, the user
+// chooses which, and the window asks without one.
+func openFolderFrom(from *window) {
 	go func() {
-		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Title: "Open a Git Repository", Directory: true})
+		opts := mygo.OpenDialogOptions{Title: "Open a Git Repository", Directory: true}
+		if from != nil {
+			opts.Parent = from.win
+		}
+		paths, err := mygo.Dialog.Open(opts)
 		if err != nil || len(paths) == 0 {
 			return
 		}
-		if err := openWindow(paths[0], source{kind: sourceWorkingTree}); err != nil {
+		var into *window
+		if from != nil && !sameRepo(from, paths[0]) {
+			switch askWhere(from) {
+			case openHere:
+				into = from
+			case openElsewhere:
+			default:
+				return // canceled
+			}
+		}
+		if err := openWindowIn(paths[0], source{kind: sourceWorkingTree}, into); err != nil {
 			mygo.Dialog.Error("Could not open the folder", errorText(err))
 			return
 		}
 		closeWelcome()
 	}()
+}
+
+// sameRepo reports whether dir is the repository the window shows.
+func sameRepo(w *window, dir string) bool {
+	repo, err := git.Open(dir)
+	return err == nil && repo.Root == w.repo.Root
+}
+
+// where is where openFolderFrom opens a repository.
+type where uint8
+
+const (
+	openElsewhere where = iota // in a window of its own
+	openHere                   // in the window it was asked from
+	openCanceled
+)
+
+// askWhere asks whether the repository replaces the review the window
+// shows, opens in a window of its own, or opens not at all.
+func askWhere(w *window) where {
+	detail := "The review of " + abbreviateHome(w.repo.Root) + " closes."
+	if n := len(w.comments); n == 1 {
+		detail = "The review of " + abbreviateHome(w.repo.Root) + " closes, with its comment."
+	} else if n > 1 {
+		detail = "The review of " + abbreviateHome(w.repo.Root) + " closes, with its " + plural(n, "comment") + "."
+	}
+	res, err := mygo.Dialog.Message(mygo.MessageOptions{
+		Parent:        w.win,
+		Type:          mygo.MessageQuestion,
+		Title:         "Open in This Window?",
+		Message:       "Open the repository in this window, or in a new one?",
+		Detail:        detail,
+		Buttons:       []string{"Open in This Window", "Open in New Window", "Cancel"},
+		DefaultButton: 0,
+		CancelButton:  2,
+	})
+	if err != nil {
+		return openCanceled
+	}
+	switch res.Button {
+	case 0:
+		return openHere
+	case 1:
+		return openElsewhere
+	}
+	return openCanceled
 }
 
 // recentMenuItems open the repositories opened lately, as File → Open
