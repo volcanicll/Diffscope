@@ -1,6 +1,5 @@
-// Package fileicon gives files the icons of their kinds
-// @pierre/trees draws them: a Go file the gopher's, a TypeScript
-// file TypeScript's, each in a color of its own.
+// Package fileicon gives files the icons of their kinds: a Go file the
+// gopher's, a TypeScript file TypeScript's, each in a color of its own.
 package fileicon
 
 import (

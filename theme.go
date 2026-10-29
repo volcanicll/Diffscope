@@ -6,7 +6,6 @@ import (
 )
 
 // palette is the colors of the review, in the light or the dark.
-
 type palette struct {
 	appBg      ui.Color // behind the cards
 	code       ui.Color // the code's own color

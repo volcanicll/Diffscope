@@ -41,8 +41,8 @@ type fileState struct {
 	kind *fileicon.Icon
 }
 
-// fileIcon draws the icon of a file's kind in its color, as the
-// file tree does; a folder for an untracked directory.
+// fileIcon draws the icon of a file's kind in its color; a folder for an
+// untracked directory.
 func fileIcon(c *ui.Context, f *fileState, size float32) ui.Element {
 	t := c.Theme()
 	if f.Directory {

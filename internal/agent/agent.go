@@ -1,7 +1,6 @@
 // Package agent asks a coding agent installed on the machine (Claude Code,
 // Codex, OpenCode or Pi) to review a change: to group its files by intent,
-// summarize it, and note what deserves a reviewer's attention
-
+// summarize it, and note what deserves a reviewer's attention.
 package agent
 
 import (

@@ -45,7 +45,7 @@ func appBundle() string {
 }
 
 // cliScript is the diffscope command: it opens the app on the repository it
-// runs in, as the terminal helper does.
+// runs in.
 func cliScript() string {
 	if bundle := appBundle(); bundle != "" && runtime.GOOS == "darwin" {
 		return fmt.Sprintf("#!/bin/sh\n# Reviews the changes of the Git repository here with %s.\nexec open -n -a %q --args --cwd \"$PWD\" \"$@\"\n", appName, bundle)

@@ -16,7 +16,6 @@ import (
 )
 
 // Settings are the user's preferences, in ~/.diffscope/diffscope.jsonc.
-
 type Settings struct {
 	CodeFontFamily      string `json:"codeFontFamily"`
 	CodeFontSize        int    `json:"codeFontSize"`

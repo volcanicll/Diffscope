@@ -11,8 +11,8 @@ import (
 	"github.com/volcanicll/diffscope/internal/git"
 )
 
-// groupMode is how the review groups its files: by
-// their kind, or by intent as an agent's review has them.
+// groupMode is how the review groups its files: by their kind, or by
+// intent as an agent's review has them.
 type groupMode uint8
 
 const (

@@ -1,6 +1,6 @@
 // Genfileicons writes internal/fileicon/data.go: the icons of kinds of
-// files that @pierre/trees draws, which files
-// they are for, and their colors, read from the package's build.
+// files that @pierre/trees draws, which files they are for, and their
+// colors, read from the package's build.
 //
 //	npm pack @pierre/trees && tar xzf pierre-trees-*.tgz
 //	go run ./tools/genfileicons package
