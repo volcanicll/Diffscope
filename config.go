@@ -287,6 +287,10 @@ type storeData struct {
 	Recent []string `json:"recent"`
 	// LastRepository is the repository opened last, as kept before Recent.
 	LastRepository string `json:"lastRepository,omitempty"`
+	// The terminal: whether its panel shows, and how tall the review
+	// above it is.
+	TermShown *bool   `json:"termShown"`
+	TermSplit float32 `json:"termSplit"`
 }
 
 // maxRecent is how many repositories File → Open Recent lists.
@@ -357,6 +361,25 @@ func (s *store) layout() (width float32, shown bool) {
 func (s *store) setLayout(width float32, shown bool) {
 	s.mu.Lock()
 	s.data.SidebarWidth, s.data.SidebarShown = width, &shown
+	s.mu.Unlock()
+	s.save()
+}
+
+// termLayout is whether the terminal panel shows, and how tall the
+// review above it is.
+func (s *store) termLayout() (split float32, shown bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	split, shown = s.data.TermSplit, false
+	if s.data.TermShown != nil {
+		shown = *s.data.TermShown
+	}
+	return
+}
+
+func (s *store) setTermLayout(split float32, shown bool) {
+	s.mu.Lock()
+	s.data.TermSplit, s.data.TermShown = split, &shown
 	s.mu.Unlock()
 	s.save()
 }

@@ -46,7 +46,24 @@ func (w *window) view(c *ui.Context) {
 		}
 		ui.Column(c).Grow(1).MinWidth(0).Background(pal.appBg).Children(func() {
 			w.toolbar(c, pal)
-			reviewBuilt = w.mainArea(c, pal)
+			if w.termShown {
+				w.ensureTerminal()
+				if w.termSplit == 0 {
+					// The terminal takes the bottom 300 or so, once.
+					_, height := c.Size()
+					w.termSplit = max(height-titleBarHeight-300, 180)
+				}
+				// The split takes the room under the toolbar: grown, it gives
+				// the panels beneath its line a height to fill, which the
+				// terminal's screen takes its rows from.
+				ui.SplitVertical(c, &w.termSplit, func() {
+					reviewBuilt = w.mainArea(c, pal)
+				}, func() {
+					w.termPanel(c, pal)
+				}).Grow(1).MinHeight(0)
+			} else {
+				reviewBuilt = w.mainArea(c, pal)
+			}
 		})
 		if w.sidebarShown && right {
 			w.sidebarResizer(c, pal)
@@ -143,6 +160,13 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 			}
 			if iconButton(c, iconSearch, "Find in diffs (⌘F)").Clicked() {
 				w.finding = !w.finding
+			}
+			term := "Terminal (⌃`)"
+			if w.termShown {
+				term = "Close Terminal (⌃`)"
+			}
+			if iconButton(c, iconTerminal, term).Clicked() {
+				w.toggleTerminal()
 			}
 			n := w.pendingComments()
 			copied := time.Since(w.copiedAt) < 2*time.Second
@@ -424,6 +448,10 @@ func (w *window) shortcuts(c *ui.Context, reviewBuilt bool) {
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyP) {
 		w.paletteOpen = !w.paletteOpen
 		w.paletteRow = 0
+	}
+	// The terminal opens and closes wherever the focus is.
+	if c.Shortcut(ui.Ctrl, ui.KeyBackquote) {
+		w.toggleTerminal()
 	}
 	// Keys that type text belong to the fields: these work while no field
 	// had the focus in the last frame.

@@ -18,6 +18,7 @@ import (
 	"github.com/volcanicll/diffscope/internal/git"
 	"github.com/volcanicll/diffscope/internal/github"
 	"github.com/volcanicll/diffscope/internal/highlight"
+	"github.com/volcanicll/diffscope/internal/vt"
 )
 
 // sourceKind is what a window reviews.
@@ -232,6 +233,17 @@ type window struct {
 	changed   bool
 	signature string
 	help      bool
+
+	// The terminal: its session, whether the panel shows, how tall the
+	// review above it is, and the list and metrics of its screen.
+	term      *termSession
+	termShown bool
+	termSplit float32
+	termFocus bool
+	termList  ui.ListState
+	termCharW float32
+	termBuf   []vt.Glyph
+	termText  *termTextClient
 }
 
 var (
@@ -319,11 +331,17 @@ func openWindowIn(dir string, src source, into *window) error {
 		if w.settings.CopyCommentsOnClose && len(w.comments) > 0 {
 			mygo.Clipboard.WriteText(w.commentsMarkdown())
 		}
+		if w.term != nil {
+			state.setTermLayout(w.termSplit, w.termShown)
+		}
 	})
 	offSettings := cfg.OnChange(func(s Settings) { w.win.Update(func() { w.applySettings(s) }) })
 	w.win.OnClosed(func() {
 		close(w.stop)
 		offSettings()
+		if w.term != nil {
+			w.term.close()
+		}
 		windowsMu.Lock()
 		for i, o := range windows {
 			if o == w {
@@ -396,6 +414,7 @@ func newWindow(repo *git.Repo, src source) *window {
 	if src.kind == sourcePull {
 		w.pr = w.pullFor(src)
 	}
+	w.termSplit, w.termShown = state.termLayout()
 	w.loadAnalysis(src)
 	w.dragWidth = w.sidebarWidth
 	w.list.Key = func(i int) any { return w.key(&w.rows[i]) }

@@ -51,4 +51,5 @@ var (
 	iconReply        = icon(`<polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>`)
 	iconStop         = icon(`<rect width="14" height="14" x="5" y="5" rx="2"/>`)
 	iconEye          = icon(`<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>`)
+	iconTerminal     = icon(`<rect width="18" height="18" x="3" y="3" rx="2"/><path d="m7 11 2-2-2-2"/><path d="M11 13h4"/>`)
 )

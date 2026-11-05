@@ -82,6 +82,7 @@ func (w *window) commands() []command {
 		}},
 		{title: "Open File in Editor", hint: selected, keys: "⌘⇧O", run: w.openCurrent},
 		{title: "Toggle Sidebar", keys: "⌘⇧B", run: w.toggleSidebar},
+		{title: "Toggle Terminal", keys: "⌃`", run: w.toggleTerminal},
 		{title: "Collapse All Files", run: func() { w.setAllCollapsed(true) }},
 		{title: "Expand All Files", run: func() { w.setAllCollapsed(false) }},
 		{title: "Toggle Diff Layout", hint: layout, run: toggleLayout},

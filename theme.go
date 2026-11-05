@@ -35,6 +35,17 @@ type palette struct {
 	ref        ui.Color // commit hashes and generated files
 	muted      ui.Color
 	syntax     [highlight.NumClasses]ui.Color
+	term       termPalette // the terminal panel's colors
+}
+
+// termPalette is the colors of the terminal: the 16 ANSI colors, and the
+// ones the emulator's defaults and cursor paint with.
+type termPalette struct {
+	fg, bg     ui.Color
+	cursor     ui.Color
+	cursorText ui.Color
+	selection  ui.Color
+	ansi       [16]ui.Color
 }
 
 var (
@@ -66,6 +77,19 @@ var (
 		viewed:     ui.RGB(31, 122, 68),
 		ref:        ui.Hex("#c56e0e"),
 		muted:      ui.RGBA(17, 17, 17, 0.48),
+		term: termPalette{
+			fg:         ui.Hex("#333333"),
+			bg:         ui.Hex("#f9f9f7"),
+			cursor:     ui.Hex("#333333"),
+			cursorText: ui.Hex("#f9f9f7"),
+			selection:  ui.RGBA(61, 135, 245, 0.28),
+			ansi: [16]ui.Color{
+				ui.Hex("#3e3e3e"), ui.Hex("#c91b00"), ui.Hex("#1a7f37"), ui.Hex("#b25e09"),
+				ui.Hex("#2456a4"), ui.Hex("#bb28c7"), ui.Hex("#0072a8"), ui.Hex("#767676"),
+				ui.Hex("#6f6f6f"), ui.Hex("#f93232"), ui.Hex("#1a9f3c"), ui.Hex("#d97b00"),
+				ui.Hex("#3b7de8"), ui.Hex("#d338d3"), ui.Hex("#1f9fc0"), ui.Hex("#333333"),
+			},
+		},
 	}
 	darkPalette = palette{
 		appBg:      ui.Hex("#141414"),
@@ -95,6 +119,19 @@ var (
 		viewed:     ui.RGB(111, 208, 148),
 		ref:        ui.Hex("#eb9a3d"),
 		muted:      ui.RGBA(230, 230, 230, 0.48),
+		term: termPalette{
+			fg:         ui.Hex("#d6d6d6"),
+			bg:         ui.Hex("#101010"),
+			cursor:     ui.Hex("#d6d6d6"),
+			cursorText: ui.Hex("#101010"),
+			selection:  ui.RGBA(90, 150, 255, 0.35),
+			ansi: [16]ui.Color{
+				ui.Hex("#2f2f2f"), ui.Hex("#cc4a45"), ui.Hex("#57a24e"), ui.Hex("#c7a541"),
+				ui.Hex("#5a8fd6"), ui.Hex("#b350c8"), ui.Hex("#4fb0c8"), ui.Hex("#c8c8c8"),
+				ui.Hex("#6b6b6b"), ui.Hex("#ff6f6b"), ui.Hex("#6fd599"), ui.Hex("#e8c66a"),
+				ui.Hex("#7ba7e8"), ui.Hex("#d98ae8"), ui.Hex("#6fd0e0"), ui.Hex("#f0f0f0"),
+			},
+		},
 	}
 )
 
