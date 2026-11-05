@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,14 +19,26 @@ import (
 	"github.com/volcanicll/diffscope/internal/vt"
 )
 
-// termSession runs the shell of the terminal panel: its pty, the
-// emulator that reads it, and the selection the user drags over the
-// screen. One window has one.
+// termSession runs a shell in the terminal panel: its pty, the emulator
+// that reads it, the list that shows its screen and the selection the
+// user drags over it. A window keeps any number of them, a tab each.
 type termSession struct {
 	w    *window
 	term *vt.Term
 	tty  *os.File // the pty's master, what the shell reads and writes
 	cmd  *exec.Cmd
+	// name is what the tab says when the shell sets no title: the
+	// program it runs, as "zsh".
+	name string
+
+	// list is its screen, which keeps its place and follows the end; text
+	// brings the typed keys and the input method's composition; buf holds
+	// the row read back for rendering. focus asks the next frame to give
+	// it the keys.
+	list  ui.ListState
+	text  *termTextClient
+	buf   []vt.Glyph
+	focus bool
 
 	mu     sync.Mutex
 	exited bool
@@ -51,9 +64,22 @@ type termCell struct {
 
 func newTermSession(w *window) *termSession {
 	s := &termSession{w: w, term: vt.New(80, 24)}
-	w.termList.FollowEnd = true
-	w.termList.Key = func(i int) any { return s.term.Count() - 1 - i }
+	s.text = &termTextClient{w: w, s: s}
+	s.list.FollowEnd = true
+	s.list.Key = func(i int) any { return s.term.Count() - 1 - i }
 	return s
+}
+
+// tabTitle is what its tab shows: the title the shell set, or the
+// program's name.
+func (s *termSession) tabTitle() string {
+	if title := s.term.Title(); title != "" {
+		return title
+	}
+	if s.name != "" {
+		return s.name
+	}
+	return "Terminal"
 }
 
 // start runs the user's shell on a pty. The tty makes it interactive,
@@ -80,6 +106,7 @@ func (s *termSession) start() {
 	}
 	s.mu.Lock()
 	s.tty, s.cmd, s.exited, s.closed = tty, cmd, false, false
+	s.name = filepath.Base(shell)
 	s.mu.Unlock()
 	go s.read(tty)
 	go s.wait(cmd, tty)
@@ -187,7 +214,7 @@ func (s *termSession) restart() {
 	s.close()
 	s.selOn = false
 	s.term = vt.New(80, 24)
-	s.w.termList.Key = func(i int) any { return s.term.Count() - 1 - i }
+	s.list.Key = func(i int) any { return s.term.Count() - 1 - i }
 	go s.start()
 }
 
@@ -312,7 +339,7 @@ func modParam(m ui.Modifiers) int {
 // input takes the terminal's keys, text and commands, and drags its
 // selection. It runs on the main thread with the panel focused.
 func (w *window) termInput(ev ui.InputEvent) bool {
-	s := w.term
+	s := w.activeTerm()
 	if s == nil {
 		return false
 	}
@@ -390,7 +417,7 @@ func (s *termSession) cellAt(x, y float32) termCell {
 	}
 	cols, rows := s.term.Size()
 	count := s.term.Count()
-	first, _ := s.w.termList.Visible()
+	first, _ := s.list.Visible()
 	row := int((y + float32(first)*lh) / lh)
 	row = min(max(row, 0), count-1)
 	if s.term.OnAlt() {
@@ -473,30 +500,93 @@ func (s *termSession) selectedText() string {
 	return sb.String()
 }
 
-// ensureTerminal starts the session when the panel shows without one,
-// as the first frame of a window restored with the panel open does.
-func (w *window) ensureTerminal() {
-	if w.term == nil {
-		w.term = newTermSession(w)
-		w.background(func() { w.term.start() })
+// activeTerm is the session the panel shows, nil for none.
+func (w *window) activeTerm() *termSession {
+	if w.termActive >= 0 && w.termActive < len(w.terms) {
+		return w.terms[w.termActive]
+	}
+	return nil
+}
+
+// ensureTerminals starts the first session when the panel shows without
+// one, as the first frame of a window restored with the panel open does.
+func (w *window) ensureTerminals() {
+	if len(w.terms) == 0 {
+		w.newTerminal()
 	}
 }
 
-// toggleTerminal shows the terminal panel, or hides it with the shell
-// running on, and starts the session the first time.
-func (w *window) toggleTerminal() {
-	w.termShown = !w.termShown
-	if w.termShown {
-		w.ensureTerminal()
-		w.termFocus = true
-	}
-	state.setTermLayout(w.termSplit, w.termShown)
+// newTerminal starts a shell in a tab of its own, and shows it.
+func (w *window) newTerminal() {
+	s := newTermSession(w)
+	w.terms = append(w.terms, s)
+	w.termActive = len(w.terms) - 1
+	w.termShown, w.termFocus = true, true
+	w.background(s.start)
+	w.saveTermLayout()
 	w.invalidate()
 }
 
-// restartTerminal runs the shell again after it exited.
+// closeTerminal ends the shell of session i, and shows the one after it,
+// or hides the panel with the last one.
+func (w *window) closeTerminal(i int) {
+	if i < 0 || i >= len(w.terms) {
+		return
+	}
+	w.terms[i].close()
+	w.terms = append(w.terms[:i], w.terms[i+1:]...)
+	if w.termActive >= len(w.terms) {
+		w.termActive = len(w.terms) - 1
+	}
+	if len(w.terms) == 0 {
+		w.termShown = false
+	}
+	w.saveTermLayout()
+	w.invalidate()
+}
+
+// selectTerminal shows the screen of session i, and gives it the keys.
+func (w *window) selectTerminal(i int) {
+	if i < 0 || i >= len(w.terms) || i == w.termActive {
+		return
+	}
+	w.termActive, w.termFocus = i, true
+	w.invalidate()
+}
+
+// saveTermLayout keeps whether the panel shows and how much room it
+// takes, for the windows opened next. It writes from a goroutine of its
+// own, on values taken here: the store's file is not the frame's work.
+func (w *window) saveTermLayout() {
+	split, width, shown := w.termSplit, w.termWidth, w.termShown
+	go state.setTermLayout(split, width, shown)
+}
+
+// toggleTerminal shows the terminal panel, or hides it with the shells
+// running on, and starts a session the first time.
+func (w *window) toggleTerminal() {
+	w.termShown = !w.termShown
+	if w.termShown {
+		w.ensureTerminals()
+		w.termFocus = true
+	}
+	w.saveTermLayout()
+	w.invalidate()
+}
+
+// setTerminalPos puts the panel under the review or beside it, as the
+// menu chooses.
+func (w *window) setTerminalPos(pos string) {
+	if pos != "bottom" && pos != "right" {
+		return
+	}
+	cfg.Update(func(s *Settings) { s.TerminalPosition = pos })
+}
+
+// restartTerminal runs the shell of the tab showing again, after it
+// exited.
 func (w *window) restartTerminal() {
-	if s := w.term; s != nil {
+	if s := w.activeTerm(); s != nil {
 		s.restart()
 	}
 	w.termFocus = true
@@ -509,6 +599,7 @@ func (w *window) restartTerminal() {
 // input method's composition, the marked text, shows at the cursor.
 type termTextClient struct {
 	w      *window
+	s      *termSession
 	marked string // what an input method is composing, empty for none
 }
 
@@ -540,7 +631,7 @@ func (s *termSession) takeAlt() (alt bool) {
 // ReplaceText is what typed keys come through, from the system's text
 // input: they go to the shell as if typed at once.
 func (c *termTextClient) ReplaceText(r *ui.TextInputRange, text string) {
-	s := c.w.term
+	s := c.s
 	if s == nil || text == "" {
 		return
 	}
@@ -574,13 +665,13 @@ func (c *termTextClient) UnmarkText() {
 // BoundsForRange puts the input methods' caret at the terminal's cursor,
 // for when an input method composes anyway.
 func (c *termTextClient) BoundsForRange(r ui.TextInputRange) (ui.Rect, ui.TextInputRange, bool) {
-	s := c.w.term
+	s := c.s
 	lh := c.w.lineHeight()
 	cw := c.w.termCharW
 	if s == nil || cw <= 0 {
 		return ui.Rect{}, r, false
 	}
-	first, _ := c.w.termList.Visible()
+	first, _ := s.list.Visible()
 	cur := s.term.Cursor()
 	return ui.Rect{
 		X: float32(cur.X) * cw,
@@ -598,27 +689,83 @@ func (w *window) termFont() string {
 	return w.codeFont() + ", PingFang SC"
 }
 
-// termPanel is the terminal at the bottom of the review: a strip with
-// the title, and the screen under it.
-func (w *window) termPanel(c *ui.Context, pal *palette) {
-	t := c.Theme()
-	tp := &pal.term
-	s := w.term
-	ui.Row(c).Height(26).Shrink(0).FillWidth().Padding(0, 8).Gap(6).AlignItems(ui.Center).
-		Background(tp.bg).BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Children(func() {
-		title := "Terminal"
-		if s != nil {
-			if set := s.term.Title(); set != "" {
-				title = set
+// How wide the panel beside the review opens, and the least it takes.
+const (
+	termDefaultWidth = 460
+	termMinWidth     = 320
+)
+
+// termBottom puts the terminal under the review, the line between them
+// dragging the review's height.
+func (w *window) termBottom(c *ui.Context, pal *palette, reviewBuilt *bool) {
+	if w.termSplit == 0 {
+		// The terminal takes the bottom 300 or so, once.
+		_, height := c.Size()
+		w.termSplit = max(height-titleBarHeight-300, 180)
+	}
+	// The split takes the room under the toolbar: grown, it gives the
+	// panels beneath its line a height to fill, which the terminal's
+	// screen takes its rows from.
+	ui.SplitVertical(c, &w.termSplit, func() {
+		*reviewBuilt = w.mainArea(c, pal)
+	}, func() {
+		w.termPanel(c, pal)
+	}).Grow(1).MinHeight(0)
+}
+
+// termRight puts the terminal beside the review, the line between them
+// dragging its width.
+func (w *window) termRight(c *ui.Context, pal *palette, reviewBuilt *bool) {
+	if w.termWidth == 0 {
+		w.termWidth = termDefaultWidth
+	}
+	ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+		ui.Box(c).Grow(1).Shrink(1).MinWidth(0).Clip().Children(func() {
+			*reviewBuilt = w.mainArea(c, pal)
+		})
+		w.termResizer(c, pal)
+		ui.Box(c).Width(w.termWidth).Shrink(0).Clip().Children(func() {
+			w.termPanel(c, pal)
+		})
+	})
+}
+
+// termResizer is the line between the review and the terminal beside it:
+// dragging it widens the panel or narrows it, as the sidebar's does.
+func (w *window) termResizer(c *ui.Context, pal *palette) {
+	ui.Box(c).Width(1).Shrink(0).Background(pal.cardBorder).Children(func() {
+		handle := ui.Box(c).Absolute().Top(0).Bottom(0).Left(-4).Width(9).Cursor(ui.CursorResizeEW)
+		if dx, _, held := handle.Dragged(); held {
+			w.termDrag += dx
+			total, _ := c.Size()
+			w.termWidth = min(max(w.termDrag, termMinWidth), max(total-360, termMinWidth))
+		} else {
+			if w.termDrag != 0 && w.termDrag != w.termWidth {
+				w.saveTermLayout()
 			}
+			w.termDrag = w.termWidth
 		}
-		ui.Text(c, title).FontSize(11).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).TextColor(t.TextMuted)
+	})
+}
+
+// termPanel is the terminal under the review, or beside it: a strip of
+// tabs, a tab a shell, and the screen of the one showing under it.
+func (w *window) termPanel(c *ui.Context, pal *palette) {
+	tp := &pal.term
+	s := w.activeTerm()
+	ui.Row(c).Height(26).Shrink(0).FillWidth().Padding(0, 8).Gap(4).AlignItems(ui.Center).
+		Background(tp.bg).BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Children(func() {
+		w.termTabs(c, pal)
+		ui.Spacer(c)
 		if s != nil && s.exitedNow() {
 			if ui.Button(c, "Restart").Clicked() {
 				w.restartTerminal()
 			}
 		}
-		if iconButton(c, iconClose, "Close Terminal (⌃`)").Size(22, 22).Clicked() {
+		if iconButton(c, iconPlus, "New Terminal (⌃⇧`)").Size(22, 22).Clicked() {
+			w.newTerminal()
+		}
+		if iconButton(c, iconClose, "Hide Terminal (⌃`)").Size(22, 22).Clicked() {
 			w.toggleTerminal()
 		}
 	})
@@ -627,36 +774,94 @@ func (w *window) termPanel(c *ui.Context, pal *palette) {
 	}
 }
 
+// termTabs shows a tab for each shell: a click on its name shows its
+// screen, and the one showing carries the × that ends it. The two are
+// buttons side by side, not one in the other, which would take its press.
+func (w *window) termTabs(c *ui.Context, pal *palette) {
+	t := c.Theme()
+	// Closing ends the build of this strip: the tabs after it moved.
+	closed := -1
+	for i, s := range w.terms {
+		active := i == w.termActive
+		tab := ui.Box(c).Height(20).Shrink(0).Padding(0, 6).Gap(4).Radius(5)
+		if active {
+			tab.Background(pal.term.selection)
+		} else if tab.Hovered() {
+			tab.Background(pal.hover)
+		}
+		tab.Children(func() {
+			name := ui.ButtonBase(c).Height(20).Padding(0).Radius(0).Label(w.tabLabel(i)).Tooltip(s.tabTitle())
+			name.Children(func() {
+				ui.Text(c, w.tabLabel(i)).FontSize(11).SingleLine().MaxWidth(150).TextColor(t.Text)
+			})
+			if name.Clicked() {
+				w.selectTerminal(i)
+			}
+			if active && closeTab(c, t, w.tabLabel(i)).Clicked() {
+				closed = i
+			}
+		})
+	}
+	if closed >= 0 {
+		w.closeTerminal(closed)
+	}
+}
+
+// tabLabel is what tab i says: its title, and the number of the tab when
+// two shells call themselves the same.
+func (w *window) tabLabel(i int) string {
+	label := w.terms[i].tabTitle()
+	for j, s := range w.terms {
+		if j != i && s.tabTitle() == label {
+			return label + " " + strconv.Itoa(i+1)
+		}
+	}
+	return label
+}
+
+// closeTab is the small × of the tab showing.
+func closeTab(c *ui.Context, t *ui.Theme, name string) ui.Element {
+	b := ui.ButtonBase(c).Size(13, 13).Center().Radius(3).Cursor(ui.CursorPointer).
+		Label("Close " + name).Tooltip("Close Terminal")
+	if b.Hovered() {
+		b.Background(ui.RGBA(127, 127, 127, 0.25))
+	}
+	b.Children(func() { ui.Icon(c, iconClose).FontSize(10) })
+	return b
+}
+
 // termGrid is the emulator's screen: a list of its rows, only the ones
 // in view built, following its end as output arrives.
 func (w *window) termGrid(c *ui.Context, pal *palette, s *termSession) {
 	lh := w.lineHeight()
 	cw := w.charWidth(c)
 	w.termCharW = cw
-	if w.termText == nil {
-		w.termText = &termTextClient{w: w}
-	}
 	// The pane's size comes from the list's own box, as the last frame laid
 	// it out: the emulator and the pty take the columns and rows that show,
 	// so programs wrap and full-screen TUIs draw where the panel ends. The
 	// rows the list built are not it: it builds a few beyond its edges, and
 	// counting those would leave the last ones clipped.
 	if lh > 0 && cw > 0 {
-		if b := w.termList.Bounds(c); b.W > 0 && b.H > 0 {
-			s.resize(int(b.W/cw), int(b.H/lh))
+		if b := s.list.Bounds(c); b.W > 0 && b.H > 0 {
+			cols, rows := int(b.W/cw), int(b.H/lh)
+			// The tabs it does not show take the same pane: their shells
+			// reflow with it, rather than when the user comes back to one.
+			for _, other := range w.terms {
+				other.resize(cols, rows)
+			}
 		}
 	}
-	ui.List(c, &w.termList, s.term.Count(), func(i int) { w.termRow(c, pal, s, i, lh, cw) }).
+	ui.List(c, &s.list, s.term.Count(), func(i int) { w.termRow(c, pal, s, i, lh, cw) }).
 		Grow(1).MinHeight(0).Background(pal.term.bg).Font(w.termFont()).FontSize(w.codeSize()).
 		HandleInput(w.termInput).
-		HandleTextInput(w.termText).
+		HandleTextInput(s.text).
 		Focusable().Label("Terminal")
-	if w.termFocus {
-		w.termFocus = false
-		w.termList.Focus(c)
+	if s.focus {
+		s.focus = false
+		s.list.Focus(c)
 	}
 	// The cursor blinks while the terminal has the focus.
-	if cur := s.term.Cursor(); cur.Visible && w.termList.FocusWithin(c) {
+	if cur := s.term.Cursor(); cur.Visible && s.list.FocusWithin(c) {
 		c.After(600 * time.Millisecond)
 	}
 }
@@ -692,7 +897,7 @@ type termRun struct {
 func (w *window) termRow(c *ui.Context, pal *palette, s *termSession, i int, lh, cw float32) {
 	// Away from the terminal, the cursor shows hollow, as the terminals
 	// draw the caret of an unfocused pane.
-	focused := w.termList.FocusWithin(c)
+	focused := s.list.FocusWithin(c)
 	runs := w.termRuns(&pal.term, s, i, focused)
 	if len(runs) == 0 {
 		ui.Box(c).Height(lh).FillWidth().Shrink(0)
@@ -718,11 +923,11 @@ func (w *window) termRow(c *ui.Context, pal *palette, s *termSession, i int, lh,
 			}
 			// The input method's composition draws over the screen at the
 			// cursor, underlined, as the terminals show it.
-			if w.termText != nil && w.termText.marked != "" {
+			if s.text != nil && s.text.marked != "" {
 				cur := s.term.Cursor()
 				if i == cur.ViewY {
 					p.RichText(r.X+float32(cur.X)*cw, r.Y, r.W-float32(cur.X)*cw,
-						ui.Span{Text: w.termText.marked, Color: pal.term.fg, Font: w.termFont(), Size: w.codeSize(), Underline: true})
+						ui.Span{Text: s.text.marked, Color: pal.term.fg, Font: w.termFont(), Size: w.codeSize(), Underline: true})
 				}
 			}
 		}).
@@ -755,14 +960,14 @@ func (w *window) termRow(c *ui.Context, pal *palette, s *termSession, i int, lh,
 // paints over its character; a hollow one lets the character show.
 func (w *window) termRuns(tp *termPalette, s *termSession, i int, focused bool) []termRun {
 	term := s.term
-	w.termBuf = term.Line(i, w.termBuf)
+	s.buf = term.Line(i, s.buf)
 	cur := term.Cursor()
 	// The cursor shows in its half of the blink when the panel is idle;
 	// output resets nothing, as a terminal at work hardly blinks.
 	cursorOn := time.Now().UnixMilli()/600%2 == 0
 	// While an input method composes, its marked text takes the cursor's
 	// place, and the block cursor stands down.
-	composing := w.termText != nil && w.termText.marked != ""
+	composing := s.text != nil && s.text.marked != ""
 	a, b, hasSel := s.selection()
 
 	var runs []termRun
@@ -776,7 +981,7 @@ func (w *window) termRuns(tp *termPalette, s *termSession, i int, focused bool) 
 		}
 		run = termRun{}
 	}
-	for x, g := range w.termBuf {
+	for x, g := range s.buf {
 		if g.Width == 0 {
 			continue // the shadow of a wide character
 		}

@@ -18,7 +18,6 @@ import (
 	"github.com/volcanicll/diffscope/internal/git"
 	"github.com/volcanicll/diffscope/internal/github"
 	"github.com/volcanicll/diffscope/internal/highlight"
-	"github.com/volcanicll/diffscope/internal/vt"
 )
 
 // sourceKind is what a window reviews.
@@ -234,16 +233,17 @@ type window struct {
 	signature string
 	help      bool
 
-	// The terminal: its session, whether the panel shows, how tall the
-	// review above it is, and the list and metrics of its screen.
-	term      *termSession
-	termShown bool
-	termSplit float32
-	termFocus bool
-	termList  ui.ListState
-	termCharW float32
-	termBuf   []vt.Glyph
-	termText  *termTextClient
+	// The terminal: its sessions, a tab each, which one shows, whether the
+	// panel shows, how tall the review above it is, how wide the panel
+	// beside it is, and the width its glyphs take.
+	terms      []*termSession
+	termActive int
+	termShown  bool
+	termSplit  float32
+	termWidth  float32
+	termDrag   float32
+	termFocus  bool
+	termCharW  float32
 }
 
 var (
@@ -331,16 +331,16 @@ func openWindowIn(dir string, src source, into *window) error {
 		if w.settings.CopyCommentsOnClose && len(w.comments) > 0 {
 			mygo.Clipboard.WriteText(w.commentsMarkdown())
 		}
-		if w.term != nil {
-			state.setTermLayout(w.termSplit, w.termShown)
+		if len(w.terms) > 0 {
+			w.saveTermLayout()
 		}
 	})
 	offSettings := cfg.OnChange(func(s Settings) { w.win.Update(func() { w.applySettings(s) }) })
 	w.win.OnClosed(func() {
 		close(w.stop)
 		offSettings()
-		if w.term != nil {
-			w.term.close()
+		for _, s := range w.terms {
+			s.close()
 		}
 		windowsMu.Lock()
 		for i, o := range windows {
@@ -414,7 +414,8 @@ func newWindow(repo *git.Repo, src source) *window {
 	if src.kind == sourcePull {
 		w.pr = w.pullFor(src)
 	}
-	w.termSplit, w.termShown = state.termLayout()
+	w.termSplit, w.termWidth, w.termShown = state.termLayout()
+	w.termActive, w.termDrag = -1, w.termWidth
 	w.loadAnalysis(src)
 	w.dragWidth = w.sidebarWidth
 	w.list.Key = func(i int) any { return w.key(&w.rows[i]) }

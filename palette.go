@@ -42,6 +42,11 @@ func (w *window) commands() []command {
 	if w.settings.ShowWhitespace {
 		whitespace = "Hide Whitespace Changes"
 	}
+	// Where the terminal sits, as its two commands say.
+	pos := "Bottom"
+	if w.settings.TerminalPosition == "right" {
+		pos = "Right"
+	}
 	return []command{
 		{title: "Focus File Filter", keys: "⌘P", run: w.focusFilter},
 		{title: "Find in Diffs", keys: "⌘F", run: func() { w.finding = true }},
@@ -83,6 +88,9 @@ func (w *window) commands() []command {
 		{title: "Open File in Editor", hint: selected, keys: "⌘⇧O", run: w.openCurrent},
 		{title: "Toggle Sidebar", keys: "⌘⇧B", run: w.toggleSidebar},
 		{title: "Toggle Terminal", keys: "⌃`", run: w.toggleTerminal},
+		{title: "New Terminal", keys: "⌃⇧`", run: w.newTerminal},
+		{title: "Terminal Position: Bottom", hint: pos, run: func() { w.setTerminalPos("bottom") }},
+		{title: "Terminal Position: Right", hint: pos, run: func() { w.setTerminalPos("right") }},
 		{title: "Collapse All Files", run: func() { w.setAllCollapsed(true) }},
 		{title: "Expand All Files", run: func() { w.setAllCollapsed(false) }},
 		{title: "Toggle Diff Layout", hint: layout, run: toggleLayout},

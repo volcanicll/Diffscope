@@ -33,7 +33,8 @@ type Settings struct {
 	AIAgent              string `json:"aiAgent"`
 	AIModel              string `json:"aiModel"`
 	ReviewCommentsPrefix string `json:"reviewCommentsPrefix"`
-	SidebarPosition      string `json:"sidebarPosition"` // left or right
+	SidebarPosition      string `json:"sidebarPosition"`  // left or right
+	TerminalPosition     string `json:"terminalPosition"` // bottom or right
 	ShowWhitespace       bool   `json:"showWhitespace"`
 	Theme                string `json:"theme"` // system, light or dark
 	WordWrap             bool   `json:"wordWrap"`
@@ -45,6 +46,7 @@ func defaultSettings() Settings {
 		DiffStyle:            "split",
 		ReviewCommentsPrefix: "# Address these Review Comments",
 		SidebarPosition:      "left",
+		TerminalPosition:     "bottom",
 		Theme:                "system",
 	}
 }
@@ -62,6 +64,9 @@ func (s *Settings) normalize() {
 	}
 	if s.SidebarPosition != "left" && s.SidebarPosition != "right" {
 		s.SidebarPosition = d.SidebarPosition
+	}
+	if s.TerminalPosition != "bottom" && s.TerminalPosition != "right" {
+		s.TerminalPosition = d.TerminalPosition
 	}
 	if s.Theme != "system" && s.Theme != "light" && s.Theme != "dark" {
 		s.Theme = d.Theme
@@ -287,10 +292,11 @@ type storeData struct {
 	Recent []string `json:"recent"`
 	// LastRepository is the repository opened last, as kept before Recent.
 	LastRepository string `json:"lastRepository,omitempty"`
-	// The terminal: whether its panel shows, and how tall the review
-	// above it is.
+	// The terminal: whether its panel shows, how tall the review above it
+	// is, and how wide the panel beside it is.
 	TermShown *bool   `json:"termShown"`
 	TermSplit float32 `json:"termSplit"`
+	TermWidth float32 `json:"termWidth"`
 }
 
 // maxRecent is how many repositories File → Open Recent lists.
@@ -365,21 +371,21 @@ func (s *store) setLayout(width float32, shown bool) {
 	s.save()
 }
 
-// termLayout is whether the terminal panel shows, and how tall the
-// review above it is.
-func (s *store) termLayout() (split float32, shown bool) {
+// termLayout is whether the terminal panel shows, how tall the review
+// above it is, and how wide the panel beside it is.
+func (s *store) termLayout() (split, width float32, shown bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	split, shown = s.data.TermSplit, false
+	split, width, shown = s.data.TermSplit, s.data.TermWidth, false
 	if s.data.TermShown != nil {
 		shown = *s.data.TermShown
 	}
 	return
 }
 
-func (s *store) setTermLayout(split float32, shown bool) {
+func (s *store) setTermLayout(split, width float32, shown bool) {
 	s.mu.Lock()
-	s.data.TermSplit, s.data.TermShown = split, &shown
+	s.data.TermSplit, s.data.TermWidth, s.data.TermShown = split, width, &shown
 	s.mu.Unlock()
 	s.save()
 }
