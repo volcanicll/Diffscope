@@ -714,6 +714,19 @@ func TestBrowseFind(t *testing.T) {
 	}
 }
 
+// TestBrowsePlainFile browses a file no lexer knows, as go.sum: it has no
+// segments, and showing its lines must not index them.
+func TestBrowsePlainFile(t *testing.T) {
+	dir := testRepo(t)
+	writeFile(t, dir, "go.sum", "golang.org/x/text v0.43.0 h1:abc=\n")
+	w, tt := newTestWindow(t, dir)
+	w.showBrowse("go.sum")
+	tt.Frame()
+	if w.browseLoading || len(w.browseLines) != 1 || w.browseSegs != nil {
+		t.Fatalf("browse: %d lines, %d segment lists, loading %v", len(w.browseLines), len(w.browseSegs), w.browseLoading)
+	}
+}
+
 func TestBrowseImage(t *testing.T) {
 	dir := testRepo(t)
 	writeFile(t, dir, "logo.png", pngOf(t, 64, 48, color.NRGBA{200, 40, 40, 255}))

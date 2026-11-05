@@ -269,6 +269,15 @@ func (w *window) loadBrowse(data []byte, img *ui.Bitmap, svg *ui.SVG) {
 	w.rowsDirty = true
 }
 
+// browseSeg returns the highlighted segments of a line of the browsed file,
+// nil when its kind has no lexer, as for go.sum.
+func (w *window) browseSeg(i int) []highlight.Seg {
+	if i < len(w.browseSegs) {
+		return w.browseSegs[i]
+	}
+	return nil
+}
+
 // browseMatch is a line of the browsed file holding the query of the find
 // bar.
 type browseMatch struct {
@@ -407,7 +416,7 @@ func (w *window) browseView(c *ui.Context, pal *palette) {
 						FontSize(float32(w.settings.CodeFontSize)).TextColor(t.TextMuted).
 						Width(float32(28 + 8*len(fmt.Sprintf("%d", len(w.browseLines))))).
 						TextAlign(ui.End).Shrink(0)
-					ui.RichText(c, codeSpans(w.browseLines[i], w.browseSegs[i], w.browseMarks(i, pal), pal)...).
+					ui.RichText(c, codeSpans(w.browseLines[i], w.browseSeg(i), w.browseMarks(i, pal), pal)...).
 						Font(w.codeFont()).FontSize(float32(w.settings.CodeFontSize)).SingleLine().MinWidth(0)
 				})
 			})
