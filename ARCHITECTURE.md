@@ -65,8 +65,9 @@ split (two columns sharing one row) or unified — and attaches syntax
 highlighting from `internal/highlight` (Chroma), word-level highlights from
 `internal/diff`, image previews, and the comment anchors. `view.go` builds
 the whole review: toolbar, banners, the scroll of file cards, shortcuts;
-`sidebar.go` builds the four tabs of the sidebar (files, history, pull
-requests, repository) beside it.
+`sidebar.go` builds the three tabs of the sidebar (files, history, pull
+requests) beside it; the repository browser opens from the More menu, or
+⌘4, and takes no tab of its own.
 
 The window rebuilds only what a change touched: `rowsDirty` rebuilds the
 rows, a file's contents arriving rebuilds that file's card, and everything
@@ -87,7 +88,7 @@ else stays.
   `repo.Log()`'s commits. The pull requests tab lists
   `internal/github`'s open pulls of the remote (`upstream`, else
   `origin`).
-- `browse.go`: the Repository tab, the files of the work tree. Choosing a
+- `browse.go`: the Repository view, the files of the work tree. Choosing a
   file opens it over the review: source up to `browseMaxLines` lines, with
   the find bar (`updateBrowseMatches`), an image's bitmap, or an SVG drawn
   directly. It is a viewer, not an editor.

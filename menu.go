@@ -70,7 +70,7 @@ func buildMenu() *mygo.Menu {
 			{Label: "Open Branch…", Click: inWindow(func(w *window) { w.openDialog(dialogBranch) })},
 			{Label: "Open Pull Request…", Click: inWindow(func(w *window) { w.openDialog(dialogPull) })},
 			mygo.Separator(),
-			{Label: "Commit…", Accelerator: "CmdOrCtrl+Shift+Enter", Click: inWindow(func(w *window) {
+			{Label: "Commit…", Accelerator: "CmdOrCtrl+Enter", Click: inWindow(func(w *window) {
 				if w.source.kind == sourceWorkingTree && !w.commitOpen && len(w.files) > 0 {
 					w.toggleCommit()
 				}
@@ -102,6 +102,7 @@ func buildMenu() *mygo.Menu {
 		}},
 		{Label: "View", Submenu: []*mygo.MenuItem{
 			{Label: "Command Bar…", Accelerator: "CmdOrCtrl+K", Click: inWindow(func(w *window) { w.paletteOpen = !w.paletteOpen })},
+			{Label: "View Options…", Accelerator: "CmdOrCtrl+Shift+V", Click: inWindow(func(w *window) { w.viewOptionsOpen = true })},
 			{Label: "Terminal", Accelerator: "Ctrl+`", Click: inWindow(func(w *window) { w.toggleTerminal() })},
 			{Label: "New Terminal", Accelerator: "Ctrl+Shift+`", Click: inWindow(func(w *window) { w.newTerminal() })},
 			{Label: "Terminal Position", Submenu: []*mygo.MenuItem{

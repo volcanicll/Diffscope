@@ -252,6 +252,9 @@ func (w *window) fileHeader(c *ui.Context, pal *palette, idx int, f *fileState, 
 			c.Toast("Copied " + f.Name())
 		}
 		open := iconButton(c, iconOpen, "Open file in editor").Disabled(f.Status == diff.Deleted || f.Directory)
+		if !h.Hovered() && !open.FocusVisible() {
+			open.Opacity(0)
+		}
 		if f.Status == diff.Deleted {
 			open.Tooltip("Deleted files cannot be opened")
 		}

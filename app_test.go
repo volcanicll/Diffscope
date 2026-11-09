@@ -158,8 +158,75 @@ func TestReview(t *testing.T) {
 	}
 }
 
+func TestViewOptionsShortcut(t *testing.T) {
+	w, tt := newTestWindow(t, testRepo(t))
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyV)
+	tt.Frame()
+	if !w.viewOptionsOpen {
+		t.Fatal("the view options popover did not open")
+	}
+	if _, ok := tt.Find("Diff layout"); !ok {
+		t.Fatalf("the popover did not build: %v", tt.Texts())
+	}
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyV)
+	tt.Frame()
+	if w.viewOptionsOpen {
+		t.Fatal("the view options popover did not close")
+	}
+}
+
+func TestScopeMenuSwitchesStage(t *testing.T) {
+	w, tt := newTestWindow(t, testRepo(t))
+	if err := tt.Click("All changes"); err != nil {
+		t.Fatal(err)
+	}
+	var staged string
+	for _, item := range tt.Menu() {
+		if strings.HasPrefix(item, "Staged changes") {
+			staged = item
+		}
+	}
+	if staged == "" {
+		t.Fatalf("menu: %q", tt.Menu())
+	}
+	if err := tt.ChooseMenuItem(staged); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if w.stageMode != stageStaged {
+		t.Fatalf("stage mode %d", w.stageMode)
+	}
+	if !tt.HasText("Staged changes") {
+		t.Fatalf("the chip does not show the scope: %v", tt.Texts())
+	}
+}
+
+func TestMoreMenuBrowsesRepository(t *testing.T) {
+	w, tt := newTestWindow(t, testRepo(t))
+	if err := tt.Click("More"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tt.Menu(); !slices.Contains(got, "Browse Repository") {
+		t.Fatalf("menu: %q", got)
+	}
+	if err := tt.ChooseMenuItem("Browse Repository"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !w.sidebarShown || w.tab != w.repoTabIndex() {
+		t.Fatalf("tab %d, shown %v", w.tab, w.sidebarShown)
+	}
+	if _, ok := tt.Find("Find a file"); !ok {
+		t.Fatalf("the repository view is not shown: %v", tt.Texts())
+	}
+}
+
 func TestUnified(t *testing.T) {
 	w, tt := newTestWindow(t, testRepo(t))
+	if err := tt.Click("View options (⌘⇧V)"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
 	if err := tt.Click("Unified"); err != nil {
 		t.Fatal(err)
 	}
@@ -659,7 +726,7 @@ func TestBranchCompare(t *testing.T) {
 	}
 	tt := ui.NewTester(w.view, 1280, 860)
 	tt.Frame()
-	if !tt.HasText("Local + branch vs base") {
+	if !tt.HasText("vs base") {
 		t.Errorf("texts %q", tt.Texts())
 	}
 }

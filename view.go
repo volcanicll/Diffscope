@@ -100,6 +100,9 @@ var debugFrames = os.Getenv("DIFFSCOPE_DEBUG") != ""
 // toolbar is the bar along the top of the review, which drags the window.
 func (w *window) toolbar(c *ui.Context, pal *palette) {
 	t := c.Theme()
+	if w.commitOpen {
+		w.viewOptionsOpen = false
+	}
 	bar := c.TitleBar()
 	sidebarRight := w.sidebarShown && w.settings.SidebarPosition == "right"
 	left := float32(14)
@@ -110,16 +113,14 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 	if !sidebarRight {
 		right += bar.Right
 	}
-	ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(8).Shrink(0).DragWindow().
+	ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(8).AlignItems(ui.Center).Shrink(0).DragWindow().
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Background(pal.headerBg.Alpha(0.6)).Children(func() {
 		if !w.sidebarShown && w.sidebarNow <= 0 {
 			w.sidebarToggle(c)
 		}
-		// The repository: its name, and where it is.
-		ui.Column(c).Gap(1).Shrink(1).MinWidth(0).Tooltip(w.repo.Root).Children(func() {
-			ui.Text(c, filepath.Base(w.repo.Root)).FontSize(13).Bold().SingleLine()
-			ui.Text(c, filepath.Dir(abbreviateHome(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine()
-		})
+		// The repository: its name; where it is, a tooltip.
+		ui.Text(c, filepath.Base(w.repo.Root)).FontSize(13).Bold().SingleLine().Ellipsis("…").MaxWidth(220).Shrink(1).MinWidth(0).
+			Tooltip(abbreviateHome(w.repo.Root))
 		if w.branch != "" && w.source.kind != sourcePull {
 			branch := chip(c, pal, iconBranch, w.branch, t.TextMuted).Tooltip("Branch " + w.branch)
 			if w.source.kind == sourceWorkingTree && len(w.branches) > 0 {
@@ -137,7 +138,7 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 			label := shortHash(w.source.ref)
 			chip(c, pal, iconCommit, label, pal.ref).Font(w.codeFont()).Tooltip(w.source.ref)
 		case sourceBranch:
-			chip(c, pal, iconBranch, "Local + branch vs "+w.source.ref, pal.ref)
+			chip(c, pal, iconBranch, "vs "+w.source.ref, pal.ref).Tooltip("The work tree since it branched from " + w.source.ref)
 		case sourcePull:
 			repo, n := w.source.pull()
 			tip := repo.String()
@@ -149,56 +150,32 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 				chip(c, pal, iconPull, fmt.Sprintf("#%d", n), pal.ref).Tooltip(tip).Shrink(0)
 			}
 		}
+		if w.source.kind == sourceWorkingTree && !w.commitOpen {
+			w.scopeChip(c, pal, t)
+		}
 		if w.loading && len(w.files) > 0 {
 			ui.Spinner(c).Label("Loading").Size(14, 14)
 		}
 		ui.Spacer(c)
-		if !w.commitOpen {
-			// Open another repository, and find, the comments, the layout.
-			if iconButton(c, iconFolderOpen, "Open Folder… (⌘O)").Clicked() {
-				openFolderFrom(w)
-			}
+		if w.commitOpen {
+			return
+		}
+		// From here on: what the review is doing, and how it shows.
+		ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
 			if iconButton(c, iconSearch, "Find in diffs (⌘F)").Clicked() {
 				w.finding = !w.finding
 			}
-			term := "Terminal (⌃`)"
-			if w.termShown {
-				term = "Close Terminal (⌃`)"
-			}
-			if iconButton(c, iconTerminal, term).Clicked() {
-				w.toggleTerminal()
-			}
-			n := w.pendingComments()
-			copied := time.Since(w.copiedAt) < 2*time.Second
-			cb := ui.ButtonBase(c).Height(28).Padding(0, 8).Gap(5).Radius(7).TextColor(t.TextMuted).
-				Label("Copy review comments").Tooltip("Copy review comments as Markdown").Disabled(n == 0)
-			if n == 0 {
-				cb.Opacity(0.5)
-			}
-			if cb.Hovered() {
-				cb.Background(ui.RGBA(127, 127, 127, 0.13))
-			}
-			if cb.Clicked() {
-				w.copyComments()
-				c.After(2 * time.Second)
-			}
-			cb.Children(func() {
-				if copied {
-					ui.Icon(c, iconCheck).FontSize(15).TextColor(pal.viewed)
-				} else {
-					ui.Icon(c, iconComment).FontSize(15)
-				}
-				ui.Textf(c, "%d", n).Font(w.codeFont()).FontSize(11).FontWeight(700)
-			})
+			w.commentsButton(c, pal, t)
+			w.aiButton(c, pal)
+			w.viewOptions(c, pal, t)
 			if w.source.kind == sourcePull {
 				w.reviewButton(c, pal)
 			}
-			if w.source.kind == sourceWorkingTree {
-				w.stageControl(c, pal)
+			if !w.sidebarShown && w.source.kind == sourceWorkingTree && len(w.files) > 0 {
+				w.toolbarCommit(c)
 			}
-			w.groupControl(c, pal)
-			w.layoutControl(c, pal)
-		}
+			w.moreButton(c)
+		})
 	})
 }
 
@@ -211,20 +188,146 @@ func chip(c *ui.Context, pal *palette, svg *ui.SVG, label string, color ui.Color
 	})
 }
 
-// layoutControl switches between split and unified diffs.
-func (w *window) layoutControl(c *ui.Context, pal *palette) {
-	t := c.Theme()
+// scopeChip chooses what part of the work tree's changes the review
+// shows: all of them, the staged ones, or the unstaged ones.
+func (w *window) scopeChip(c *ui.Context, pal *palette, t *ui.Theme) {
+	label := []string{"All changes", "Staged changes", "Unstaged changes"}[w.stageMode]
+	el := ui.Row(c).Gap(4).Padding(4, 9).Radius(12).Background(ui.RGBA(127, 127, 127, 0.08)).
+		Border(1, ui.RGBA(127, 127, 127, 0.12)).TextColor(t.Text).Shrink(0).Children(func() {
+		ui.Text(c, label).FontSize(12).FontWeight(600).SingleLine()
+		ui.Icon(c, iconChevronDown).FontSize(11).TextColor(t.TextMuted)
+	})
+	el.Menu(func(m *ui.Menu) {
+		// The counts of the other scopes are known only while all the
+		// changes are shown.
+		var counts [3]int
+		if w.stageMode == stageAll {
+			for _, f := range w.files {
+				if f.Staged {
+					counts[stageStaged]++
+				}
+				if f.Unstaged {
+					counts[stageUnstaged]++
+				}
+			}
+			counts[stageAll] = len(w.files)
+		} else {
+			counts[w.stageMode] = len(w.files)
+		}
+		for i, name := range []string{"All changes", "Staged changes", "Unstaged changes"} {
+			item := name
+			if w.stageMode == stageAll || i == w.stageMode {
+				item += fmt.Sprintf(" (%d)", counts[i])
+			}
+			if m.Item(item).Checked(i == w.stageMode).Chosen() && i != w.stageMode {
+				w.stageMode = i
+				w.load()
+			}
+		}
+	})
+}
+
+// commentsButton copies the pending review comments. It shows only when
+// there are some: an empty count has nothing to do in the toolbar.
+func (w *window) commentsButton(c *ui.Context, pal *palette, t *ui.Theme) {
+	n := w.pendingComments()
+	if n == 0 {
+		return
+	}
+	copied := time.Since(w.copiedAt) < 2*time.Second
+	cb := ui.ButtonBase(c).Height(26).Padding(0, 7).Gap(4).Radius(7).TextColor(t.TextMuted).
+		Label("Copy review comments").Tooltip("Copy review comments as Markdown")
+	if cb.Hovered() {
+		cb.Background(ui.RGBA(127, 127, 127, 0.13))
+	}
+	if cb.Clicked() {
+		w.copyComments()
+		c.After(2 * time.Second)
+	}
+	cb.Children(func() {
+		if copied {
+			ui.Icon(c, iconCheck).FontSize(14).TextColor(pal.viewed)
+		} else {
+			ui.Icon(c, iconComment).FontSize(14)
+		}
+		ui.Textf(c, "%d", n).Font(w.codeFont()).FontSize(10.5).FontWeight(700)
+	})
+}
+
+// aiButton opens the agent's review, once an agent is installed: the
+// sparkle is the one entry to the review and the notes.
+func (w *window) aiButton(c *ui.Context, pal *palette) {
+	installed, known := installedAgents()
+	if !known || len(installed) == 0 {
+		return
+	}
+	tip := "Review with AI (⌘⇧I)"
+	st := w.analyses[w.source]
+	running := st != nil && st.running
+	b := ui.ButtonBase(c).Size(28, 28).Radius(7).Center().Label(tip).Tooltip(tip).TextColor(pal.ref)
+	if b.Pressed() {
+		b.Background(ui.RGBA(127, 127, 127, 0.22))
+	} else if b.Hovered() {
+		b.Background(ui.RGBA(127, 127, 127, 0.13))
+	}
+	b.Children(func() {
+		if running {
+			ui.Spinner(c).Size(14, 14)
+			return
+		}
+		ui.Icon(c, iconSparkle).FontSize(16)
+	})
+	if b.Clicked() {
+		w.reviewWithAI()
+	}
+}
+
+// viewOptions is the toolbar's sliders and the panel they open: the
+// settings of the diff, the grouping and the terminal, out of the bar.
+func (w *window) viewOptions(c *ui.Context, pal *palette, t *ui.Theme) {
+	btn := iconButton(c, iconSliders, "View options (⌘⇧V)")
+	if btn.Clicked() {
+		w.viewOptionsOpen = !w.viewOptionsOpen
+	}
+	ui.PopoverBase(c, btn, &w.viewOptionsOpen, func(panel ui.Element) {
+		panel.Margin(6, 0, 0, 0).Width(276).Padding(9).Radius(10).Background(pal.headerBg).
+			Border(1, pal.cardBorder).Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.18))
+		ui.Column(c).Gap(2).Children(func() {
+			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Diff").FontSize(11).FontWeight(600).TextColor(t.TextMuted).Grow(1)
+				w.diffChoice(c, pal, t)
+			})
+			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Group").FontSize(11).FontWeight(600).TextColor(t.TextMuted).Grow(1)
+				w.groupControl(c, pal)
+			})
+			ui.Box(c).Height(1).Background(pal.cardBorder).Margin(6, 4)
+			wrap := w.settings.WordWrap
+			if ui.Checkbox(c, &wrap, "Word wrap").Changed() {
+				cfg.Update(func(s *Settings) { s.WordWrap = wrap })
+			}
+			whitespace := w.settings.ShowWhitespace
+			if ui.Checkbox(c, &whitespace, "Show whitespace").Changed() {
+				cfg.Update(func(s *Settings) { s.ShowWhitespace = whitespace })
+			}
+			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Terminal").FontSize(11).FontWeight(600).TextColor(t.TextMuted).Grow(1)
+				w.terminalChoice(c, pal, t)
+			})
+		})
+	})
+}
+
+// diffChoice switches between split and unified diffs.
+func (w *window) diffChoice(c *ui.Context, pal *palette, t *ui.Theme) {
 	choice := 0
 	if !w.split() {
 		choice = 1
 	}
 	seg := ui.SegmentedBase(c, &choice, 2)
-	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.1)).Label("Diff layout").Children(func() {
-		for i, it := range []struct {
-			icon *ui.SVG
-			name string
-		}{{iconSplit, "Split"}, {iconUnified, "Unified"}} {
-			s := seg.Segment(i).Size(30, 24).Radius(6).Center().Label(it.name).Tooltip(it.name).TextColor(t.TextMuted)
+	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.10)).Label("Diff layout").Children(func() {
+		for i, name := range []string{"Split", "Unified"} {
+			s := seg.Segment(i).Height(24).Padding(0, 8).Radius(6).Center().Label(name).Tooltip(name).TextColor(t.TextMuted)
 			if i == choice {
 				s.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)
 			}
@@ -236,33 +339,70 @@ func (w *window) layoutControl(c *ui.Context, pal *palette) {
 					w.rowsDirty = true
 				}
 			})
-			s.Children(func() { ui.Icon(c, it.icon).FontSize(15) })
+			s.Children(func() { ui.Text(c, name).FontSize(11).FontWeight(600) })
 		}
 	})
-
 }
 
-// stageControl switches the work tree's review between all the changes,
-// the staged ones, and the unstaged ones.
-func (w *window) stageControl(c *ui.Context, pal *palette) {
-	t := c.Theme()
-	seg := ui.SegmentedBase(c, &w.stageMode, 3)
-	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.1)).Label("Stage").Children(func() {
-		for i, name := range []string{"All", "Staged", "Unstaged"} {
+// terminalChoice puts the terminal below the review or beside it.
+func (w *window) terminalChoice(c *ui.Context, pal *palette, t *ui.Theme) {
+	choice := 0
+	if w.settings.TerminalPosition == "right" {
+		choice = 1
+	}
+	seg := ui.SegmentedBase(c, &choice, 2)
+	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.10)).Label("Terminal position").Children(func() {
+		for i, name := range []string{"Bottom", "Right"} {
 			s := seg.Segment(i).Height(24).Padding(0, 8).Radius(6).Center().Label(name).Tooltip(name).TextColor(t.TextMuted)
-			if i == w.stageMode {
+			if i == choice {
 				s.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)
 			}
-			mode := i
 			s.OnClick(func() {
-				if mode != w.stageMode {
-					w.stageMode = mode
-					w.load()
+				pos := map[int]string{0: "bottom", 1: "right"}[i]
+				if pos != w.settings.TerminalPosition {
+					w.setTerminalPos(pos)
 				}
 			})
 			s.Children(func() { ui.Text(c, name).FontSize(11).FontWeight(600) })
 		}
 	})
+}
+
+// moreButton holds the actions that need no place in the bar.
+func (w *window) moreButton(c *ui.Context) {
+	b := iconButton(c, iconMore, "More")
+	b.Menu(func(m *ui.Menu) {
+		if m.Item("Open Folder…").Shortcut(ui.Cmd, ui.KeyO).Chosen() {
+			openFolderFrom(w)
+		}
+		if m.Item("Browse Repository").Shortcut(ui.Cmd, ui.Key4).Chosen() {
+			w.tab, w.sidebarShown = w.repoTabIndex(), true
+		}
+		if m.Item("Terminal").Checked(w.termShown).Shortcut(ui.Ctrl, ui.KeyBackquote).Chosen() {
+			w.toggleTerminal()
+		}
+		if m.Item("New Terminal").Shortcut(ui.Ctrl|ui.Shift, ui.KeyBackquote).Chosen() {
+			w.newTerminal()
+		}
+		if w.pendingComments() > 0 {
+			m.Separator()
+			if m.Item("Copy Review Comments").Chosen() {
+				w.copyComments()
+			}
+		}
+	})
+}
+
+// toolbarCommit opens the commit sheet when the sidebar, which holds the
+// same button, is closed.
+func (w *window) toolbarCommit(c *ui.Context) {
+	b := ui.Button(c, "").Height(28).Tooltip("Commit the changes (⌘⏎)").Children(func() {
+		ui.Icon(c, iconCommit).FontSize(14)
+		ui.Text(c, "Commit").SingleLine()
+	})
+	if b.Clicked() {
+		w.toggleCommit()
+	}
 }
 
 // mainArea shows the review, the commit view, or why there is nothing,
@@ -479,6 +619,12 @@ func (w *window) shortcuts(c *ui.Context, reviewBuilt bool) {
 	w.typing = false
 	if w.commitOpen || w.paletteOpen || w.dialogOpen || w.renameOpen || w.askingDelete != "" || w.help || typing || !reviewBuilt || (w.pr != nil && w.pr.submitOpen) {
 		return
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyV) {
+		w.viewOptionsOpen = !w.viewOptionsOpen
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyEnter) && w.source.kind == sourceWorkingTree && len(w.files) > 0 {
+		w.toggleCommit()
 	}
 	if c.Shortcut(0, ui.KeyJ) || c.Shortcut(ui.Ctrl, ui.KeyDown) {
 		w.nextHunk(1)

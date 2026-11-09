@@ -153,25 +153,62 @@ h1 .accent{color:var(--accent-deep);position:relative;white-space:nowrap}
 .stage .wrap{max-width:1240px;padding:0 24px}
 .window{position:relative;background:var(--win-bg);border:1px solid var(--line-2);border-radius:14px;
   overflow:hidden;box-shadow:var(--shadow-window)}
-.toolbar{height:52px;display:flex;align-items:center;gap:5px;padding:0 12px;background:var(--win-head);
-  border-bottom:1px solid var(--line);font-size:12.5px}
-.tool{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:var(--ink-2);flex:0 0 auto;
+/* title bars */
+.win-top{display:grid;grid-template-columns:250px minmax(0,1fr);height:38px;background:var(--win-head);
+  border-bottom:1px solid var(--line)}
+.side-top{display:flex;align-items:center;gap:6px;min-width:0;padding:0 10px;background:var(--win-side);
+  border-right:1px solid var(--line)}
+.main-top{position:relative;display:flex;align-items:center;gap:8px;min-width:0;padding:0 12px}
+.repo-name{font-size:13px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;flex:0 0 auto}
+.tabs{display:flex;flex:1;min-width:0;gap:2px;padding:2px;border-radius:8px;
+  background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.tabs button{display:flex;flex:1;min-width:0;height:24px;align-items:center;justify-content:center;gap:3px;
+  border-radius:6px;font:600 10px/1 var(--sans);color:var(--ink-2);white-space:nowrap;
+  transition:background .2s,color .2s,box-shadow .2s}
+.tabs button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.10)}
+.tabs svg{width:13px;height:13px}
+.tool{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;color:var(--ink-2);flex:0 0 auto;
   transition:background .2s,color .2s,transform .2s var(--ease)}
 .tool:hover{background:color-mix(in srgb,var(--ink) 7%,transparent);color:var(--ink)}
 .tool:active{transform:scale(.92)}
-.tool.on{color:var(--accent-deep)}
-.tool svg{width:16px;height:16px}
-.win-title{margin:0 auto 0 8px;line-height:1.2}
-.win-title b{display:block;font-size:13px;font-weight:700}
-.win-title span{display:block;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
-.branch-chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11.5px;
-  color:var(--ink-2);border:1px solid var(--line-2);border-radius:7px;padding:4px 9px;flex:0 0 auto}
+.tool.on,.tool[aria-pressed="true"]{color:var(--accent-deep)}
+.tool svg{width:15px;height:15px}
+.branch-chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;
+  color:var(--ink-2);border:1px solid var(--line-2);border-radius:999px;padding:4px 8px;flex:0 0 auto}
 .branch-chip svg{width:12px;height:12px}
+.scope-wrap,.view-wrap,.more-wrap{position:relative;display:flex;flex:0 0 auto}
+.scope-btn{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 9px;border:1px solid var(--line-2);
+  border-radius:999px;background:var(--surface);color:var(--ink);font:600 11px/1 var(--sans);
+  box-shadow:0 1px 1px rgba(0,0,0,.04);white-space:nowrap;transition:background .15s}
+.scope-btn:hover{background:color-mix(in srgb,var(--ink) 4%,var(--surface))}
+.scope-btn svg{width:11px;height:11px;color:var(--ink-3)}
+.actions{display:flex;align-items:center;gap:2px;margin-left:auto;flex:0 0 auto}
+.menu{position:absolute;top:calc(100% + 6px);z-index:40;min-width:184px;padding:4px;border:1px solid var(--line-2);
+  border-radius:9px;background:var(--surface);box-shadow:var(--shadow-card)}
+.menu[hidden],.view-pop[hidden]{display:none}
+.scope-menu{left:0}
+.more-menu{right:0}
+.menu button{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;
+  padding:7px 8px;border-radius:6px;font-size:11.5px;color:var(--ink-2);text-align:left;transition:background .15s,color .15s}
+.menu button:hover{background:color-mix(in srgb,var(--ink) 6%,transparent);color:var(--ink)}
+.menu button.on{color:var(--ink);font-weight:600}
+.menu .count{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.view-pop{position:absolute;top:calc(100% + 6px);right:0;z-index:45;width:276px;padding:9px;
+  border:1px solid var(--line-2);border-radius:10px;background:var(--surface);box-shadow:var(--shadow-card)}
+.pop-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px}
+.pop-label{font-size:11px;font-weight:600;color:var(--ink-3)}
+.pop-sep{height:1px;margin:6px 4px;background:var(--line)}
+.check{display:flex;align-items:center;gap:7px;padding:6px 4px;font-size:11.5px;color:var(--ink);cursor:pointer}
+.check .box{display:grid;place-items:center;width:14px;height:14px;flex:0 0 auto;border:1px solid var(--line-2);
+  border-radius:4px;transition:background .15s,border-color .15s}
+.check .box.on{background:var(--accent);border-color:var(--accent)}
+.check .box.on::after{content:"";width:3px;height:6px;border:solid #fff;border-width:0 1.5px 1.5px 0;
+  transform:rotate(45deg) translateY(-1px)}
+.view-pop .seg button{padding:3px 8px;font-size:10.5px}
 .badge{font-family:var(--mono);font-size:11px;color:var(--ink-3);flex:0 0 auto}
 .seg{display:flex;background:color-mix(in srgb,var(--ink) 6%,transparent);border-radius:8px;padding:2px;flex:0 0 auto}
 .seg button{padding:4px 11px;border-radius:6px;font-size:11.5px;font-weight:500;color:var(--ink-2);transition:all .25s}
 .seg button.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.tsep{width:1px;height:18px;background:var(--line-2);margin:0 5px;flex:0 0 auto}
 .win-body{display:grid;grid-template-columns:250px minmax(0,1fr);height:584px}
 
 /* sidebar */
@@ -431,7 +468,8 @@ footer .right{margin-left:auto;font-family:var(--mono);font-size:11px}
   .side{display:none}
   .stage .wrap{overflow-x:auto;overscroll-behavior-x:contain}
   .window{min-width:720px}
-  .toolbar .win-title span{display:none}
+  .win-top{grid-template-columns:1fr}
+  .side-top{display:none}
   .bento{grid-template-columns:1fr}
   .cell,.cell.full{grid-column:auto}
   .cell.full{display:block}
@@ -445,7 +483,6 @@ footer .right{margin-left:auto;font-family:var(--mono);font-size:11px}
   .bento{grid-template-columns:1fr}
   .cell,.cell.wide,.cell.full{grid-column:auto}
   .proof .wrap{grid-template-columns:1fr 1fr;gap:16px}
-  .win-title{display:none}
   .branch-chip{display:none}
   h1{font-size:clamp(34px,10vw,46px)}
   .hero-meta{gap:12px}
@@ -524,48 +561,84 @@ footer .right{margin-left:auto;font-family:var(--mono);font-size:11px}
   <div class="stage">
     <div class="wrap">
       <div class="window" role="region" aria-label="Interactive Diffscope demo">
-        <div class="toolbar">
-          <button class="tool" title="Changed files" aria-label="Changed files">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 6h18M3 12h12M3 18h7"/><path d="m13 15 3 3 5-5" opacity=".55"/></svg>
-          </button>
-          <button class="tool" title="History" aria-label="History">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
-          </button>
-          <button class="tool" title="Pull requests" aria-label="Pull requests">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.3"/><circle cx="6" cy="18" r="2.3"/><circle cx="18" cy="8" r="2.3"/><path d="M6 8.3v7.4M18 10.3c0 4-2 5-5.5 5.6"/></svg>
-          </button>
-          <button class="tool" title="Repository browser" aria-label="Repository browser">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7V5.8c0-.9.7-1.6 1.6-1.6h4.2L11 6h8.1c.8 0 1.4.6 1.4 1.4V18c0 .8-.7 1.5-1.6 1.5H5.1c-.9 0-1.6-.7-1.6-1.5V7z"/></svg>
-          </button>
-
-          <div class="win-title"><b>Diffscope</b><span>~/code/diffscope</span></div>
-
-          <span class="branch-chip">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="4" cy="4" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="6" r="1.6"/><path d="M4 5.6v4.8M12 7.6c0 2.2-3 2.4-6 3"/></svg>
-            main
-          </span>
-
-          <button class="tool" title="Find in diffs (⌘F)" aria-label="Find in diffs">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
-          </button>
-          <span class="badge" title="Review comments">💬 0</span>
-
-          <div class="seg" id="seg" role="group" aria-label="Change scope">
-            <button class="on" data-scope="all">All</button>
-            <button data-scope="staged">Staged</button>
-            <button data-scope="unstaged">Unstaged</button>
+        <div class="win-top">
+          <div class="side-top">
+            <button class="tool" title="Hide sidebar" aria-label="Hide sidebar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+            </button>
+            <div class="tabs" role="tablist" aria-label="Sidebar">
+              <button class="on" role="tab" aria-selected="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 6h18M3 12h12M3 18h7"/><path d="m13 15 3 3 5-5" opacity=".55"/></svg>
+                Files
+              </button>
+              <button role="tab" aria-selected="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+                History
+              </button>
+              <button role="tab" aria-selected="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.3"/><circle cx="6" cy="18" r="2.3"/><circle cx="18" cy="8" r="2.3"/><path d="M6 8.3v7.4M18 10.3c0 4-2 5-5.5 5.6"/></svg>
+                Pulls
+              </button>
+            </div>
           </div>
-
-          <span class="tsep"></span>
-          <button class="tool" id="aiBtn" title="AI review (read-only)" aria-label="Toggle AI review" aria-pressed="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.8 9l5.7 1.8-5.7 1.8L12 18.2l-1.8-5.6L4.5 10.8 10.2 9z"/><path d="M18.5 3.5v3M17 5h3" opacity=".6"/></svg>
-          </button>
-          <button class="tool on" title="Split diff" aria-label="Split diff">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3.5" y="4.5" width="7" height="15" rx="1.5"/><rect x="13.5" y="4.5" width="7" height="15" rx="1.5"/></svg>
-          </button>
-          <button class="tool" title="Unified diff" aria-label="Unified diff">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="4.5" y="3.5" width="15" height="7" rx="1.5"/><rect x="4.5" y="13.5" width="15" height="7" rx="1.5"/></svg>
-          </button>
+          <div class="main-top">
+            <span class="repo-name" title="~/code/diffscope">Diffscope</span>
+            <span class="branch-chip">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="4" cy="4" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="6" r="1.6"/><path d="M4 5.6v4.8M12 7.6c0 2.2-3 2.4-6 3"/></svg>
+              main
+            </span>
+            <div class="scope-wrap">
+              <button class="scope-btn" id="scopeBtn" aria-haspopup="menu" aria-expanded="false">
+                <span id="scopeLabel">All changes</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="menu scope-menu" id="scopeMenu" role="menu" hidden>
+                <button class="on" data-scope="all" role="menuitemradio" aria-checked="true"><span>All changes</span><span class="count">3</span></button>
+                <button data-scope="staged" role="menuitemradio" aria-checked="false"><span>Staged changes</span><span class="count">2</span></button>
+                <button data-scope="unstaged" role="menuitemradio" aria-checked="false"><span>Unstaged changes</span><span class="count">1</span></button>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="tool" title="Find in diffs (⌘F)" aria-label="Find in diffs">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+              </button>
+              <button class="tool" id="aiBtn" title="AI review (read-only)" aria-label="Toggle AI review" aria-pressed="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.8 9l5.7 1.8-5.7 1.8L12 18.2l-1.8-5.6L4.5 10.8 10.2 9z"/><path d="M18.5 3.5v3M17 5h3" opacity=".6"/></svg>
+              </button>
+              <div class="view-wrap">
+                <button class="tool" id="viewBtn" title="View options (⌘⇧V)" aria-label="View options" aria-expanded="false">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></svg>
+                </button>
+                <div class="view-pop" id="viewPop" role="dialog" aria-label="View options" hidden>
+                  <div class="pop-row">
+                    <span class="pop-label">Diff</span>
+                    <div class="seg"><button class="on">Split</button><button>Unified</button></div>
+                  </div>
+                  <div class="pop-row">
+                    <span class="pop-label">Group</span>
+                    <div class="seg"><button class="on">None</button><button>Kind</button><button>AI</button></div>
+                  </div>
+                  <div class="pop-sep"></div>
+                  <label class="check"><span class="box on"></span>Word wrap</label>
+                  <label class="check"><span class="box"></span>Show whitespace</label>
+                  <div class="pop-row">
+                    <span class="pop-label">Terminal</span>
+                    <div class="seg"><button class="on">Bottom</button><button>Right</button></div>
+                  </div>
+                </div>
+              </div>
+              <div class="more-wrap">
+                <button class="tool" id="moreBtn" title="More" aria-label="More" aria-expanded="false">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+                </button>
+                <div class="menu more-menu" id="moreMenu" role="menu" hidden>
+                  <button role="menuitem">Open Folder…</button>
+                  <button role="menuitem">Browse Repository</button>
+                  <button role="menuitem">Terminal</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="win-body">
@@ -869,7 +942,8 @@ footer .right{margin-left:auto;font-family:var(--mono);font-size:11px}
         <div class="key-row"><span>Next / previous AI note</span><kbd>N</kbd> <kbd>⇧N</kbd></div>
       </div>
       <div>
-        <div class="key-row"><span>Files / History / PRs / Repository</span><kbd>⌘1</kbd>–<kbd>⌘4</kbd></div>
+        <div class="key-row"><span>Files / History / PRs</span><kbd>⌘1</kbd>–<kbd>⌘3</kbd></div>
+        <div class="key-row"><span>Repository</span><kbd>⌘4</kbd></div>
         <div class="key-row"><span>Toggle sidebar</span><kbd>⌘⇧B</kbd></div>
         <div class="key-row"><span>Terminal / new terminal</span><kbd>⌃`</kbd> <kbd>⌃⇧`</kbd></div>
         <div class="key-row"><span>Review with AI</span><kbd>⌘⇧I</kbd></div>
@@ -892,7 +966,7 @@ footer .right{margin-left:auto;font-family:var(--mono);font-size:11px}
     <div class="use reveal">
       <h3><span class="n">01</span> Uncommitted changes</h3>
       <code><b>diffscope</b></code>
-      <p>Run it inside a repository. Switch between All, Staged and Unstaged from the toolbar.</p>
+      <p>Run it inside a repository. Switch between All changes, Staged changes and Unstaged changes from the scope menu beside the branch.</p>
     </div>
     <div class="use reveal">
       <h3><span class="n">02</span> A commit</h3>
@@ -958,7 +1032,7 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => {
 const nav = $("#nav");
 addEventListener("scroll", () => nav.classList.toggle("scrolled", scrollY > 10), { passive: true });
 
-/* ---------- scope: All / Staged / Unstaged ---------- */
+/* ---------- scope menu, view options, more ---------- */
 const SCOPE = {
   all:       { files: ["gitignore", "maingo", "scratch"], a: 15, d: 0 },
   staged:    { files: ["gitignore", "maingo"],            a: 3,  d: 0 },
@@ -966,13 +1040,24 @@ const SCOPE = {
 };
 let scope = "all";
 const cardOf = name => document.getElementById("card-" + name);
+const scopeBtn = $("#scopeBtn"), scopeMenu = $("#scopeMenu"), scopeLabel = $("#scopeLabel");
+const viewBtn = $("#viewBtn"), viewPop = $("#viewPop");
+const moreBtn = $("#moreBtn"), moreMenu = $("#moreMenu");
+const scopeNames = { all: "All changes", staged: "Staged changes", unstaged: "Unstaged changes" };
+function closeMenus(except) {
+  [scopeMenu, viewPop, moreMenu].forEach(el => { if (el !== except) el.hidden = true; });
+  scopeBtn.setAttribute("aria-expanded", String(!scopeMenu.hidden));
+  viewBtn.setAttribute("aria-expanded", String(!viewPop.hidden));
+  moreBtn.setAttribute("aria-expanded", String(!moreMenu.hidden));
+}
 function setScope(next) {
-  if (next === scope) return;
+  if (next === scope) { closeMenus(); return; }
   scope = next;
-  $$("#seg button").forEach(b => {
+  scopeLabel.textContent = scopeNames[next];
+  $$("#scopeMenu button").forEach(b => {
     const on = b.dataset.scope === next;
     b.classList.toggle("on", on);
-    b.setAttribute("aria-pressed", String(on));
+    b.setAttribute("aria-checked", String(on));
   });
   const visible = new Set(SCOPE[next].files);
   $$(".card:not(.ai-card)").forEach(card => {
@@ -989,11 +1074,49 @@ function setScope(next) {
   $("#totD").textContent = "−" + SCOPE[next].d;
   $("#treeEmpty").style.display = "none";
   $$("#tree .tree-row").forEach(r => r.classList.toggle("off", !visible.has(r.dataset.file)));
+  closeMenus();
 }
-$$("#seg button").forEach(b => {
-  b.setAttribute("aria-pressed", String(b.classList.contains("on")));
-  b.addEventListener("click", () => setScope(b.dataset.scope));
+$$("#scopeMenu button").forEach(b => b.addEventListener("click", () => setScope(b.dataset.scope)));
+scopeBtn.addEventListener("click", e => {
+  e.stopPropagation();
+  const open = scopeMenu.hidden;
+  closeMenus(scopeMenu);
+  scopeMenu.hidden = !open;
+  scopeBtn.setAttribute("aria-expanded", String(open));
 });
+viewBtn.addEventListener("click", e => {
+  e.stopPropagation();
+  const open = viewPop.hidden;
+  closeMenus(viewPop);
+  viewPop.hidden = !open;
+  viewBtn.setAttribute("aria-expanded", String(open));
+});
+moreBtn.addEventListener("click", e => {
+  e.stopPropagation();
+  const open = moreMenu.hidden;
+  closeMenus(moreMenu);
+  moreMenu.hidden = !open;
+  moreBtn.setAttribute("aria-expanded", String(open));
+});
+$$("#moreMenu button").forEach(b => b.addEventListener("click", () => closeMenus()));
+document.addEventListener("click", e => {
+  if (!e.target.closest(".scope-wrap,.view-wrap,.more-wrap")) closeMenus();
+});
+addEventListener("keydown", e => { if (e.key === "Escape") closeMenus(); });
+
+/* The tabs and the view options are visual in this demo. */
+$$(".tabs button").forEach(b => b.addEventListener("click", () => {
+  $$(".tabs button").forEach(x => {
+    x.classList.toggle("on", x === b);
+    x.setAttribute("aria-selected", String(x === b));
+  });
+}));
+$$(".view-pop .seg").forEach(seg => seg.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+  seg.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+})));
+$$(".view-pop .check").forEach(label => label.addEventListener("click", () => {
+  label.querySelector(".box").classList.toggle("on");
+}));
 
 /* ---------- sidebar: selection, scroll-to-card, filter ---------- */
 $$("#tree .tree-row").forEach(row => row.addEventListener("click", () => {

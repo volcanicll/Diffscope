@@ -13,8 +13,8 @@ accent color, dark mode, menus and vibrancy.
 ## Features
 
 - **Review local changes**: all, staged, or unstaged files against `HEAD`
-  (the toolbar's All / Staged / Unstaged segments), in one scrolling surface
-  of file cards with sticky headers.
+  (the toolbar's scope menu: All changes, Staged changes, Unstaged changes),
+  in one scrolling surface of file cards with sticky headers.
 - **Split and unified diffs** (View → Diff) with syntax highlighting
   (the Licht and Dunkel palettes), word-level change highlighting, and
   unchanged lines that expand 100 at a time or all at once. New and deleted
@@ -224,4 +224,4 @@ LLM walkthroughs, GitHub and GitLab pull request review beyond GitHub,
 Markdown previews, editing files in place, definition lookup, `a..b`
 ranges, and separate cards for the staged and unstaged parts of a file
 (Diffscope shows a file's changes against `HEAD` as one; the toolbar's
-All / Staged / Unstaged segments switch between them).
+scope menu switches between them).

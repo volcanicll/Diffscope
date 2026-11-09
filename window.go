@@ -85,7 +85,7 @@ type window struct {
 	// sidebarNow is the width the sidebar showed as it slid, 0 while it is
 	// closed and the toolbar holds its toggle.
 	sidebarNow   float32
-	tab          int // 0 files, 1 history
+	tab          int // 0 files, 1 history, 2 pull requests, 3 repository
 	filter       string
 	filterFocus  bool
 	treeList     ui.ListState
@@ -129,6 +129,9 @@ type window struct {
 	held []func()
 	// typing is set while a field has the focus, whose keys are its own.
 	typing bool
+
+	// The view options popover, below the toolbar's sliders.
+	viewOptionsOpen bool
 
 	// Find in diffs.
 	finding     bool
@@ -333,7 +336,7 @@ func openWindowIn(dir string, src source, into *window) error {
 		MinHeight:      420,
 		StateKey:       "main",
 		TitleBarStyle:  mygo.TitleBarHiddenInset,
-		TitleBarHeight: 52,
+		TitleBarHeight: titleBarHeight,
 		Vibrancy:       mygo.VibrancySidebar,
 		Content:        ui.View(w.view),
 	})

@@ -15,7 +15,7 @@ import (
 // browseMaxLines is how many lines of a file the browser shows.
 const browseMaxLines = 10000
 
-// browseNode is a row of the Repository tab: a file or a directory.
+// browseNode is a row of the Repository view: a file or a directory.
 type browseNode struct {
 	name string
 	dir  bool
@@ -23,7 +23,7 @@ type browseNode struct {
 	path string
 }
 
-// browseRow is a row of the Repository tab as it shows: a node and its
+// browseRow is a row of the Repository view as it shows: a node and its
 // depth.
 type browseRow struct {
 	key   string
@@ -50,7 +50,7 @@ func (w *window) switchBranch(branch string) {
 	})
 }
 
-// loadRepoFiles lists the files of the work tree for the Repository tab.
+// loadRepoFiles lists the files of the work tree for the Repository view.
 func (w *window) loadRepoFiles() {
 	w.repoLoading = true
 	w.background(func() {
@@ -70,7 +70,7 @@ func (w *window) loadRepoFiles() {
 	})
 }
 
-// repoTabIndex is the sidebar tab of the Repository, which the pull
+// repoTabIndex is the sidebar view of the Repository, which the pull
 // requests tab shifts when GitHub has no remote.
 func (w *window) repoTabIndex() int {
 	if w.gh.ok() {
@@ -79,7 +79,7 @@ func (w *window) repoTabIndex() int {
 	return 2
 }
 
-// buildRepoTree fills the rows of the Repository tab from the file paths,
+// buildRepoTree fills the rows of the Repository view from the file paths,
 // the filtered ones when a filter is on, open all the way then.
 func (w *window) buildRepoTree() {
 	type dirNode struct {

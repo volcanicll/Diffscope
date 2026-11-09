@@ -286,9 +286,8 @@ func (w *window) sidebar(c *ui.Context) {
 			// sidebar and its views. The toggle keeps to the left, clear of the
 			// window controls and of the views, which the spacer pushes right
 			// while there is room for them beside it.
-			ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(6).DragWindow().Children(func() {
+			ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(6).AlignItems(ui.Center).DragWindow().Children(func() {
 				w.sidebarToggle(c)
-				ui.Spacer(c)
 				if w.tabControl(c) {
 					w.commitOpen = false
 				}
@@ -356,41 +355,58 @@ func (w *window) sidebarBg(t *ui.Theme) ui.Color {
 
 // titleBarHeight is the height of the bars along the top, which centers
 // their controls on the traffic lights of a window with an inset title bar.
-const titleBarHeight = 52
+const titleBarHeight = 38
 
 // tabControl switches the sidebar between the files, the history and the
-// pull requests, and reports a switch.
+// pull requests, and reports a switch. The Repository is not a tab: the
+// More menu and ⌘4 open it, and no segment shows then.
 func (w *window) tabControl(c *ui.Context) bool {
 	t := c.Theme()
 	pal := paletteFor(t)
 	type item struct {
-		icon *ui.SVG
-		name string
+		icon  *ui.SVG
+		name  string // the accessibility name and the tooltip
+		label string // the text, when the sidebar is wide enough
 	}
-	items := []item{{iconTree, "Files (⌘1)"}, {iconHistory, "History (⌘2)"}}
+	items := []item{
+		{iconTree, "Files (⌘1)", "Files"},
+		{iconHistory, "History (⌘2)", "History"},
+	}
 	if w.gh.ok() {
-		items = append(items, item{iconPull, "Pull Requests (⌘3)"})
+		items = append(items, item{iconPull, "Pull Requests (⌘3)", "Pulls"})
 	}
-	items = append(items, item{iconFolderOpen, "Repository (⌘4)"})
-	// The segments fit a narrow sidebar: the toggle and the gaps around it
-	// take 40, and the track pads 2 on each side and 2 between segments.
-	left, right := w.sidebarInsets(c)
-	segW := float32(30)
-	if n := len(items); n > 0 {
-		fit := (w.sidebarWidth - left - right - 40 - 4 - float32(2*(n-1))) / float32(n)
-		segW = min(segW, max(fit, 18))
-	}
-	seg := ui.SegmentedBase(c, &w.tab, len(items))
-	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.12)).Label("Sidebar").Children(func() {
+	// Below this width the labels do not fit beside the toggle.
+	showText := w.sidebarWidth >= 288
+	changed := false
+	track := ui.Row(c).Height(28).Grow(1).MinWidth(0).Padding(2).Gap(2).Radius(8).
+		Background(ui.RGBA(127, 127, 127, 0.12)).Label("Sidebar")
+	track.Children(func() {
 		for i, it := range items {
-			s := seg.Segment(i).Size(segW, 24).Radius(6).Center().Label(it.name).Tooltip(it.name).TextColor(t.TextMuted)
-			if i == w.tab {
-				s.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)
+			b := ui.ButtonBase(c).Height(24).Grow(1).MinWidth(0).Center().Padding(0, 2).Radius(6).Gap(2).
+				Label(it.name).Tooltip(it.name)
+			if w.tab == i {
+				b.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)
+			} else {
+				b.TextColor(t.TextMuted)
+				if b.Hovered() {
+					b.Background(ui.RGBA(127, 127, 127, 0.10))
+				}
 			}
-			s.Children(func() { ui.Icon(c, it.icon).FontSize(15) })
+			if b.Clicked() {
+				w.tab = i
+				changed = true
+			}
+			b.Children(func() {
+				if showText {
+					ui.Icon(c, it.icon).FontSize(13)
+					ui.Text(c, it.label).FontSize(10).FontWeight(600).SingleLine()
+					return
+				}
+				ui.Icon(c, it.icon).FontSize(15)
+			})
 		}
 	})
-	return seg.Track.Changed()
+	return changed
 }
 
 // sidebarToggle shows and hides the sidebar.

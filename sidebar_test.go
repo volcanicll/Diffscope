@@ -274,8 +274,9 @@ func TestSidebarSlidesClosedAndOpen(t *testing.T) {
 
 func TestSidebarToggleStaysClearOfTheViews(t *testing.T) {
 	w, tt := newTestWindow(t, testRepo(t))
-	// Four views, as a repository on GitHub has, in a sidebar at its
-	// narrowest, under the traffic lights.
+	// Three views, as a repository on GitHub has, in a sidebar at its
+	// narrowest, under the traffic lights. The Repository opens from the
+	// More menu, so it is not a segment.
 	w.gh = ghRemote{repo: github.Repo{Owner: "diffscope", Name: "diffscope"}, remote: "origin"}
 	w.sidebarWidth = sidebarMin
 	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 74})
@@ -287,7 +288,7 @@ func TestSidebarToggleStaysClearOfTheViews(t *testing.T) {
 	if r.X < 0 || r.X+r.W > w.sidebarWidth {
 		t.Fatalf("the toggle spans %v, outside the sidebar %v", r, w.sidebarWidth)
 	}
-	for _, tip := range []string{"Files (⌘1)", "History (⌘2)", "Pull Requests (⌘3)", "Repository (⌘4)"} {
+	for _, tip := range []string{"Files (⌘1)", "History (⌘2)", "Pull Requests (⌘3)"} {
 		if _, ok := tt.Find(tip); !ok {
 			t.Fatalf("the %q view is missing", tip)
 		}

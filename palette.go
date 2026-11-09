@@ -93,6 +93,7 @@ func (w *window) commands() []command {
 		{title: "Terminal Position: Right", hint: pos, run: func() { w.setTerminalPos("right") }},
 		{title: "Collapse All Files", run: func() { w.setAllCollapsed(true) }},
 		{title: "Expand All Files", run: func() { w.setAllCollapsed(false) }},
+		{title: "View Options…", hint: "Diff, grouping, wrap and terminal", keys: "⌘⇧V", run: func() { w.viewOptionsOpen = true }},
 		{title: "Toggle Diff Layout", hint: layout, run: toggleLayout},
 		{title: "Toggle Word Wrap", hint: wrap, keys: "⌥Z", run: toggleWrap},
 		{title: "Toggle Whitespace", hint: whitespace, run: func() {
