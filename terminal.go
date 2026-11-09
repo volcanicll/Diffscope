@@ -40,9 +40,10 @@ type termSession struct {
 	buf   []vt.Glyph
 	focus bool
 
-	mu     sync.Mutex
-	exited bool
-	closed bool
+	mu      sync.Mutex
+	started bool // the shell has been run once
+	exited  bool
+	closed  bool
 
 	// The selection, as view rows and columns, in the order chosen: a
 	// before b as the user dragged, normalized when read.
@@ -82,19 +83,28 @@ func (s *termSession) tabTitle() string {
 	return "Terminal"
 }
 
-// start runs the user's shell on a pty. The tty makes it interactive,
-// and the login environment gives it the PATH the app found.
+// start runs the user's shell on a pty at the size the panel shows. It runs
+// once, after the first frame has laid the panel out: the shell's greeting
+// wraps at the width it is written in, and resizing the pty afterwards does
+// not reflow what it already printed.
 func (s *termSession) start() {
+	s.mu.Lock()
+	if s.started || s.closed || s.exited {
+		s.mu.Unlock()
+		return
+	}
+	s.started = true
+	s.mu.Unlock()
+
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/zsh"
 	}
+	cols, rows := s.term.Size()
 	cmd := exec.Command(shell)
 	cmd.Dir = s.w.repo.Root
 	cmd.Env = append(shellenv.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
-	// The size the frame sets comes at once after; the shell starts in a
-	// size of its own, not the zero the pty would otherwise carry.
-	tty, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: 24, Cols: 80})
+	tty, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: uint16(rows), Cols: uint16(cols)})
 	if err != nil {
 		s.w.update(func() {
 			s.mu.Lock()
@@ -107,9 +117,25 @@ func (s *termSession) start() {
 	s.mu.Lock()
 	s.tty, s.cmd, s.exited, s.closed = tty, cmd, false, false
 	s.name = filepath.Base(shell)
+	s.ptyCols, s.ptyRows = cols, rows
 	s.mu.Unlock()
 	go s.read(tty)
 	go s.wait(cmd, tty)
+}
+
+// startPending runs the shell of a session that has not run yet, now that
+// the panel has measured the size it shows. A window without a real screen,
+// as the tests drive, starts no shell.
+func (s *termSession) startPending() {
+	if s.w.win == nil {
+		return
+	}
+	s.mu.Lock()
+	pending := !s.started && !s.closed && !s.exited
+	s.mu.Unlock()
+	if pending {
+		s.w.background(s.start)
+	}
 }
 
 // read pours what the shell writes into the emulator, answering what it
@@ -162,10 +188,21 @@ func (s *termSession) write(b []byte) {
 // not have started when the first size comes, and its size catches up
 // with the next frame after.
 func (s *termSession) resize(cols, rows int) {
-	changed := false
-	if c, r := s.term.Size(); c != cols || r != rows {
-		s.term.Resize(cols, rows)
-		changed = true
+	if cols <= 0 || rows <= 0 {
+		return
+	}
+	c, r := s.term.Size()
+	changed := c != cols || r != rows
+	if changed {
+		// A dragged divider changes the pane every frame; reflow once it
+		// rests, rather than re-wrapping the scrollback at every step.
+		if s.w.termResizing {
+			return
+		}
+		s.term.Reflow(cols, rows)
+		if c != cols {
+			s.clearSelection()
+		}
 	}
 	s.mu.Lock()
 	tty := s.tty
@@ -209,13 +246,18 @@ func (s *termSession) close() {
 	}
 }
 
-// restart runs a new shell, as the panel's button does.
+// restart runs a new shell, as the panel's button does, at the size the
+// panel shows rather than the 80x24 a screen starts with.
 func (s *termSession) restart() {
+	cols, rows := s.term.Size()
 	s.close()
 	s.selOn = false
-	s.term = vt.New(80, 24)
+	s.term = vt.New(cols, rows)
 	s.list.Key = func(i int) any { return s.term.Count() - 1 - i }
-	go s.start()
+	s.mu.Lock()
+	s.started, s.closed, s.exited = false, false, false
+	s.mu.Unlock()
+	s.startPending()
 }
 
 // paste writes text the clipboard holds as if typed; the emulator wraps
@@ -516,13 +558,13 @@ func (w *window) ensureTerminals() {
 	}
 }
 
-// newTerminal starts a shell in a tab of its own, and shows it.
+// newTerminal adds a tab of its own, and shows it. Its shell starts once
+// the frame has measured the panel, so that its greeting fits the width.
 func (w *window) newTerminal() {
 	s := newTermSession(w)
 	w.terms = append(w.terms, s)
 	w.termActive = len(w.terms) - 1
 	w.termShown, w.termFocus = true, true
-	w.background(s.start)
 	w.saveTermLayout()
 	w.invalidate()
 }
@@ -736,10 +778,14 @@ func (w *window) termResizer(c *ui.Context, pal *palette) {
 	ui.Box(c).Width(1).Shrink(0).Background(pal.cardBorder).Children(func() {
 		handle := ui.Box(c).Absolute().Top(0).Bottom(0).Left(-4).Width(9).Cursor(ui.CursorResizeEW)
 		if dx, _, held := handle.Dragged(); held {
-			w.termDrag += dx
+			w.termResizing = true
+			// The panel sits on the right: dragging the line left (dx < 0)
+			// widens it, the opposite of the sidebar on the left.
+			w.termDrag -= dx
 			total, _ := c.Size()
 			w.termWidth = min(max(w.termDrag, termMinWidth), max(total-360, termMinWidth))
 		} else {
+			w.termResizing = false
 			if w.termDrag != 0 && w.termDrag != w.termWidth {
 				w.saveTermLayout()
 			}
@@ -753,8 +799,32 @@ func (w *window) termResizer(c *ui.Context, pal *palette) {
 func (w *window) termPanel(c *ui.Context, pal *palette) {
 	tp := &pal.term
 	s := w.activeTerm()
-	ui.Row(c).Height(26).Shrink(0).FillWidth().Padding(0, 8).Gap(4).AlignItems(ui.Center).
-		Background(tp.bg).BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Children(func() {
+	bar := ui.Row(c).Height(26).Shrink(0).FillWidth().Padding(0, 8).Gap(4).AlignItems(ui.Center).
+		Background(tp.bg).BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder)
+	// The panel's own menu: closing, a new shell, and the position, which
+	// the menu bar's View menu offers too.
+	bar.ContextMenu(func(m *ui.Menu) {
+		if m.Item("New Terminal").Chosen() {
+			w.newTerminal()
+		}
+		if m.Item("Close Terminal").Chosen() {
+			w.toggleTerminal()
+		}
+		if active := w.activeTerm(); active != nil {
+			if m.Item("Close This Tab").Chosen() {
+				w.closeTerminal(w.termActive)
+			}
+		}
+		m.Separator()
+		right := w.settings.TerminalPosition == "right"
+		if m.Item("Terminal Position: Bottom").Checked(!right).Chosen() {
+			w.setTerminalPos("bottom")
+		}
+		if m.Item("Terminal Position: Right").Checked(right).Chosen() {
+			w.setTerminalPos("right")
+		}
+	})
+	bar.Children(func() {
 		w.termTabs(c, pal)
 		ui.Spacer(c)
 		if s != nil && s.exitedNow() {
@@ -783,7 +853,10 @@ func (w *window) termTabs(c *ui.Context, pal *palette) {
 	closed := -1
 	for i, s := range w.terms {
 		active := i == w.termActive
-		tab := ui.Box(c).Height(20).Shrink(0).Padding(0, 6).Gap(4).Radius(5)
+		// The name and the × sit side by side: a Box lays them out in a
+		// column, which put the × under the name, past the tab's height,
+		// where the pointer never reached it.
+		tab := ui.Row(c).Height(20).Shrink(0).Padding(0, 6).Gap(4).Radius(5)
 		if active {
 			tab.Background(pal.term.selection)
 		} else if tab.Hovered() {
@@ -845,9 +918,11 @@ func (w *window) termGrid(c *ui.Context, pal *palette, s *termSession) {
 		if b := s.list.Bounds(c); b.W > 0 && b.H > 0 {
 			cols, rows := int(b.W/cw), int(b.H/lh)
 			// The tabs it does not show take the same pane: their shells
-			// reflow with it, rather than when the user comes back to one.
+			// follow it, rather than when the user comes back to one. A shell
+			// not started yet starts here, at the size it will print in.
 			for _, other := range w.terms {
 				other.resize(cols, rows)
+				other.startPending()
 			}
 		}
 	}

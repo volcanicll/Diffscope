@@ -299,3 +299,67 @@ func TestConcurrentQueriesWhileRendering(t *testing.T) {
 		term.Cursor()
 	}
 }
+
+// Reflow re-wraps the lines the terminal already holds to the new width.
+func TestReflowWidens(t *testing.T) {
+	term := New(10, 4)
+	term.Write([]byte("hello world!"))
+	if got := text(term, 0); got != "hello worl" {
+		t.Fatalf("row 0 = %q", got)
+	}
+	if got := text(term, 1); got != "d!        " {
+		t.Fatalf("row 1 = %q", got)
+	}
+	term.Reflow(20, 4)
+	if got := text(term, 0); got != "hello world!        " {
+		t.Errorf("after widening, row 0 = %q", got)
+	}
+	if c := term.Cursor(); c.X != 12 || c.Y != 0 {
+		t.Errorf("after widening, cursor = %d,%d", c.X, c.Y)
+	}
+}
+
+// Reflow narrows a line onto the rows it wraps onto.
+func TestReflowNarrows(t *testing.T) {
+	term := New(20, 4)
+	term.Write([]byte("hello world!"))
+	term.Reflow(10, 4)
+	if got := text(term, 0); got != "hello worl" {
+		t.Errorf("row 0 = %q", got)
+	}
+	if got := text(term, 1); got != "d!        " {
+		t.Errorf("row 1 = %q", got)
+	}
+	if c := term.Cursor(); c.X != 2 || c.Y != 1 {
+		t.Errorf("after narrowing, cursor = %d,%d", c.X, c.Y)
+	}
+}
+
+// Reflow keeps the colors of the cells it rewrites.
+func TestReflowKeepsStyle(t *testing.T) {
+	term := New(10, 4)
+	term.Write([]byte("\x1b[31mhello world\x1b[0m!"))
+	term.Reflow(20, 4)
+	l := term.Line(0, nil)
+	if fg, ok := l[0].FG.(ansi.BasicColor); !ok || fg != 1 {
+		t.Errorf("glyph 0 fg = %v, want basic 1", l[0].FG)
+	}
+	if l[12].FG != nil {
+		t.Errorf("glyph 12 fg = %v, want the default", l[12].FG)
+	}
+}
+
+// Text below the cursor belongs to a program's own layout, which a reflow
+// leaves alone.
+func TestReflowLeavesCursorAddressedScreens(t *testing.T) {
+	term := New(10, 4)
+	term.Write([]byte("top\x1b[3;1Hbottom"))
+	term.Reflow(20, 4)
+	// The screen resized, but nothing was rejoined nor moved.
+	if got := text(term, 0); got != "top                 " {
+		t.Errorf("row 0 = %q", got)
+	}
+	if got := text(term, 2); got != "bottom              " {
+		t.Errorf("row 2 = %q", got)
+	}
+}

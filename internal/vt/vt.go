@@ -10,6 +10,7 @@ package vt
 import (
 	"image/color"
 	"io"
+	"strings"
 	"sync"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -142,8 +143,157 @@ func (t *Term) Write(p []byte) (int, error) {
 func (t *Term) Resize(cols, rows int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.resizeLocked(cols, rows)
+}
+
+// resizeLocked is Resize with mu held.
+func (t *Term) resizeLocked(cols, rows int) {
 	t.cols, t.rows = cols, rows
 	t.emu.Resize(cols, rows)
+}
+
+// Reflow makes the terminal the new size and re-wraps what it already holds
+// to the new width — the scrollback and the screen, up to the cursor — as a
+// terminal that reflows does when its window changes. The width a line
+// wrapped at is not recorded, so a line filled to its last column is taken
+// for a wrapped one. The alternate screen, a hidden cursor and a screen a
+// program drew with the cursor moved about only resize: their layout belongs
+// to the program.
+func (t *Term) Reflow(cols, rows int) {
+	if cols <= 0 || rows <= 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if cols == t.cols && rows == t.rows {
+		return
+	}
+	if t.onAlt || t.emu.CursorHidden() {
+		t.resizeLocked(cols, rows)
+		return
+	}
+	lines, ok := t.captureLocked()
+	if !ok {
+		t.resizeLocked(cols, rows)
+		return
+	}
+	t.resizeLocked(cols, rows)
+	// Clear the screen and the scrollback, home the cursor and the pen.
+	if _, err := t.emu.Write([]byte("\x1b[3J\x1b[H\x1b[0m")); err != nil {
+		return
+	}
+	var b strings.Builder
+	for i, line := range lines {
+		if i > 0 {
+			b.WriteString("\r\n")
+		}
+		writeCells(&b, line)
+	}
+	_, _ = t.emu.Write([]byte(b.String()))
+}
+
+// vtLine is the cells of one logical line: a physical line the program wrote,
+// with the lines it wrapped onto joined to it.
+type vtLine []uv.Cell
+
+// captureLocked reads the screen and the scrollback as logical lines, up to
+// the cursor. It reports false when the screen is not a log that ends at the
+// cursor, which a reflow cannot rebuild.
+func (t *Term) captureLocked() ([]vtLine, bool) {
+	p := t.emu.CursorPosition()
+	cx, cy := p.X, p.Y
+	if cy < 0 || cy >= t.rows {
+		return nil, false
+	}
+	cx = min(max(cx, 0), t.cols-1)
+	// Nothing right of the cursor, nor below it: a log ends there.
+	for x := cx + 1; x < t.cols; x++ {
+		if occupied(t.emu.CellAt(x, cy)) {
+			return nil, false
+		}
+	}
+	for y := cy + 1; y < t.rows; y++ {
+		for x := 0; x < t.cols; x++ {
+			if occupied(t.emu.CellAt(x, y)) {
+				return nil, false
+			}
+		}
+	}
+
+	sb := t.emu.ScrollbackLen()
+	var lines []vtLine
+	prevFull := false
+	for y := 0; y < sb+cy+1; y++ {
+		row := make(vtLine, t.cols)
+		for x := range row {
+			var c *uv.Cell
+			if y < sb {
+				c = t.emu.ScrollbackCellAt(x, y)
+			} else {
+				c = t.emu.CellAt(x, y-sb)
+			}
+			if c != nil {
+				row[x] = *c
+			}
+		}
+		last := lastOccupied(row)
+		full := last == t.cols-1
+		n := last + 1
+		if y == sb+cy && n < cx {
+			n = cx // the cells the cursor sits after, blank or not
+		}
+		row = row[:n]
+		switch {
+		case prevFull && len(lines) > 0:
+			lines[len(lines)-1] = append(lines[len(lines)-1], row...)
+		default:
+			lines = append(lines, append(vtLine(nil), row...))
+		}
+		prevFull = full
+	}
+	return lines, true
+}
+
+// occupied reports whether a cell shows anything but its background.
+func occupied(c *uv.Cell) bool {
+	return c != nil && c.Content != "" && c.Content != " "
+}
+
+// lastOccupied is the index of the last cell showing anything, -1 for none.
+func lastOccupied(line vtLine) int {
+	for x := len(line) - 1; x >= 0; x-- {
+		if occupied(&line[x]) {
+			return x
+		}
+	}
+	return -1
+}
+
+// writeCells writes a logical line with the styles its cells carry.
+func writeCells(b *strings.Builder, line vtLine) {
+	for i := 0; i < len(line); {
+		style := line[i].Style
+		j := i + 1
+		for j < len(line) && line[j].Style.Equal(&style) {
+			j++
+		}
+		var text strings.Builder
+		for _, c := range line[i:j] {
+			switch {
+			case c.Width == 0 && c.Content == "":
+				// The shadow of a wide character, which the character itself
+				// takes the columns of.
+			case c.Content == "":
+				text.WriteByte(' ')
+			default:
+				text.WriteString(c.Content)
+			}
+		}
+		if text.Len() > 0 {
+			b.WriteString(style.Styled(text.String()))
+		}
+		i = j
+	}
 }
 
 // Size is the terminal's size in columns and rows.

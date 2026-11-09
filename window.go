@@ -236,14 +236,15 @@ type window struct {
 	// The terminal: its sessions, a tab each, which one shows, whether the
 	// panel shows, how tall the review above it is, how wide the panel
 	// beside it is, and the width its glyphs take.
-	terms      []*termSession
-	termActive int
-	termShown  bool
-	termSplit  float32
-	termWidth  float32
-	termDrag   float32
-	termFocus  bool
-	termCharW  float32
+	terms        []*termSession
+	termActive   int
+	termShown    bool
+	termSplit    float32
+	termWidth    float32
+	termDrag     float32
+	termResizing bool // the divider between the review and the panel is dragged
+	termFocus    bool
+	termCharW    float32
 }
 
 var (
