@@ -11,7 +11,8 @@ git command ──▶ internal/git ──▶ internal/diff ▲
                                              │ load.go ──▶ window state ──▶ views
 github API ──▶ internal/github ──────────────┘                    (view.go, sidebar.go,
 agent CLI ───▶ internal/agent ──▶ analysis.go                      diffview.go, rows.go,
-                                                                   browse.go, commit.go…)
+                                                                   browse.go, commit.go,
+                 pty ──▶ internal/vt ──▶ terminal.go               terminal.go…)
 ```
 
 ## The window and its state
@@ -98,6 +99,14 @@ else stays.
   change's files, updates its progress as lines arrive, keeps the result
   until asked for another, and fingerprints the files it saw so a changed
   file can be marked as no longer covered.
+- `terminal.go`: the terminal panel. A session runs the user's shell on a
+  pty with the login environment (`internal/shellenv`), reads its output
+  into `internal/vt` and draws the rows as a list; ending it kills the
+  shell's process group, children included. Tabs hold the sessions; the
+  panel sits under the review or beside it. The shell starts once the
+  first frame has measured the panel, so its greeting wraps at the width
+  it is read at — and `Term.Reflow` re-wraps the screen and scrollback when
+  the width changes later.
 
 ## The packages
 
@@ -143,13 +152,34 @@ the notes that `analysis.go` keeps.
 The file tree's icons, generated from [@pierre/trees][] by
 `go run ./tools/genfileicons`, each kind of file in its color.
 
+### internal/vt
+
+`charmbracelet/x/vt`'s emulator, wrapped for the panel: the bytes a
+program writes become rows of cells the view renders, and the state the
+keyboard and the session ask about (title, cursor, modes, scrollback,
+alternate screen). The wrapper adds `Reflow`, which rewrites the screen
+and scrollback at a new width from their cells — the width a line wrapped
+at is not recorded, so a line filled to its last column counts as a
+continued one. It leaves the alternate screen, a hidden cursor and
+cursor-addressed layouts alone, because those belong to the program.
+
+### internal/proc, internal/shellenv
+
+`proc` prepares the commands the app runs: it keeps a console from opening
+on Windows, and starts a command in a process group of its own, which
+cancelling kills whole. `shellenv` finds the programs of the user's shell —
+an app opened from Finder sees only the system's PATH — and gives the
+terminal its login environment, so commands run as they do in Terminal.
+
 ## Testing
 
 `go test ./...` drives the packages, and the views too: `app_test.go` builds
 a window over a real temporary repository, without a real screen, and
 asserts on the elements of the frame — clicks in the sidebar, comments
-added, a commit made. `DIFFSCOPE_SNAPSHOTS=<dir> go test .` writes each
-frame as a PNG to look at, which is how the palettes are checked by eye.
+added, a commit made — and `terminal_test.go` drives the terminal panel's
+tabs, hide button, divider and reflow. `DIFFSCOPE_SNAPSHOTS=<dir> go test .`
+writes each frame as a PNG to look at, which is how the palettes are checked
+by eye.
 
 ## Environment
 

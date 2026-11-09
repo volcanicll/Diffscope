@@ -31,6 +31,11 @@ accent color, dark mode, menus and vibrancy.
 - **Repository browser** (<kbd>⌘4</kbd>): the files of the work tree, with
   any file's contents in an overlay, an in-file find bar, and picture
   previews (images and SVG).
+- **Terminal** (<kbd>⌃`</kbd>): a real shell in a pty, under the review or
+  beside it (View → Terminal Position), with a tab per session
+  (<kbd>⌃⇧`</kbd> opens another). Dragging the divider resizes the panel,
+  and its content re-wraps to the new width; closing the last tab hides
+  the panel. The panel's tab strip has a context menu for all of this too.
 - **Pull requests**: list the open pull requests of the repository's GitHub remote
   (<kbd>⌘3</kbd>) and review any of them, open or not. Diffscope fetches its
   commits into your clone, so it reads as local changes do: highlighted,
@@ -98,6 +103,7 @@ Recent** lists the ten opened lately. **File → Open Commit…**
 | <kbd>⌘↩</kbd> | Add the comment; commit, in the commit view |
 | <kbd>⌘⇧M</kbd> | Copy review comments as Markdown |
 | <kbd>⌘⇧B</kbd> | Toggle the sidebar |
+| <kbd>⌃`</kbd> / <kbd>⌃⇧`</kbd> | Toggle the terminal / open a terminal tab |
 | <kbd>⌘1</kbd> / <kbd>⌘2</kbd> / <kbd>⌘3</kbd> / <kbd>⌘4</kbd> | Files / History / Pull requests / Repository |
 | <kbd>⌘⇧I</kbd> | Review with AI |
 | <kbd>⌘⇧Enter</kbd> | Commit… |
@@ -129,6 +135,7 @@ windows as the file changes:
     "aiModel": "",                 // e.g. "sonnet"; empty is the agent's default
     "reviewCommentsPrefix": "# Address these Review Comments",
     "sidebarPosition": "left",     // or "right"
+    "terminalPosition": "bottom",  // or "right"
     "showWhitespace": false,
     "theme": "system",             // or "light", "dark"
     "wordWrap": false
@@ -146,7 +153,8 @@ login`), or set `githubToken`, `$DIFFSCOPE_GITHUB_TOKEN`, `$GH_TOKEN` or
 `$GITHUB_TOKEN`.
 
 The window remembers, per repository inside `~/.diffscope`, which files
-were marked viewed, and the sidebar's width and whether it showed.
+were marked viewed, the sidebar's width and whether it showed, and the
+terminal's size and whether it showed.
 
 ## Development
 
@@ -171,6 +179,10 @@ whenever the main thread keeps work waiting over 30 ms.
 would otherwise take its windows. `DIFFSCOPE_CPUPROFILE=<file>` and
 `DIFFSCOPE_STARTUP_PROFILE=<file>` write CPU profiles.
 
+The landing page is `site/index.html`: one self-contained file, with no
+build step. Open it in a browser, or serve `site/` to preview it at a
+local address.
+
 The code is in a few parts:
 
 - `internal/git`: the repository through the `git` command: changes,
@@ -181,10 +193,14 @@ The code is in a few parts:
 - `internal/github`: pull requests, through `gh` or a token.
 - `internal/agent`: the coding agents' review, with their models.
 - `internal/fileicon`: the file tree's icons.
+- `internal/vt`: the terminal emulator, adapted from `charmbracelet/x/vt`,
+  with the reflow that re-wraps the screen and scrollback when the panel's
+  width changes. `internal/shellenv` gives the shell the login environment
+  the app found; the session ends the shell's process group itself.
 - The `main` package: the window and its views (`view.go`, `sidebar.go`,
-  `diffview.go`, `browse.go`, `commit.go`, `palette.go`), the rows of the
-  diff surface (`rows.go`), the file kinds (`groups.go`), AI analysis
-  (`analysis.go`), comments, find, settings and menus.
+  `diffview.go`, `browse.go`, `commit.go`, `palette.go`, `terminal.go`),
+  the rows of the diff surface (`rows.go`), the file kinds (`groups.go`),
+  AI analysis (`analysis.go`), comments, find, settings and menus.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how a review travels from a `git`
 command to the screen.
