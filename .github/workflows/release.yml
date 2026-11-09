@@ -46,7 +46,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --title "Diffscope $VERSION" \
             --generate-notes \
-            build/*.dmg
+            build/*/*.dmg
         # For the in-app updater, generate a key pair with `go tool mygo
         # keygen`, put the private key in the secret
         # MYGO_UPDATER_PRIVATE_KEY, add the updates block of mygo.json, and
