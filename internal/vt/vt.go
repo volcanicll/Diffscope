@@ -61,6 +61,9 @@ type Term struct {
 	appCursor  bool
 	bracketed  bool
 	title      string
+	// logStale is set when ReflowScreen re-wrapped the screen alone: the
+	// scrollback still holds the width it had, until ReflowLog comes.
+	logStale bool
 	// replyMu guards the replies alone, apart from mu: the pump must
 	// collect them without waiting on mu, or a chunk carrying two answers
 	// deadlocks the write that holds mu against the very pipe that waits
@@ -165,10 +168,11 @@ func (t *Term) Reflow(cols, rows int) {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.logStale = false
 	if cols == t.cols && rows == t.rows {
 		return
 	}
-	if t.onAlt || t.emu.CursorHidden() {
+	if _, _, ok := t.logEndLocked(); !ok {
 		t.resizeLocked(cols, rows)
 		return
 	}
@@ -178,6 +182,73 @@ func (t *Term) Reflow(cols, rows int) {
 		return
 	}
 	t.resizeLocked(cols, rows)
+	t.rewriteLocked(lines)
+}
+
+// ReflowScreen makes the terminal the new size and re-wraps the screen to
+// the width, leaving the scrollback as it was. A drag of the panel's
+// divider goes by it: the screen, and the prompt a shell redraws after it,
+// follows the drag at once, and the history re-wraps when the drag rests,
+// with ReflowLog. The alternate screen, a hidden cursor and a screen a
+// program drew with the cursor moved about keep their size, which belongs
+// to the program: resizing them alone would cut what no longer fits.
+func (t *Term) ReflowScreen(cols, rows int) {
+	if cols <= 0 || rows <= 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if cols == t.cols && rows == t.rows {
+		return
+	}
+	cx, cy, ok := t.logEndLocked()
+	if !ok {
+		// A screen this cannot rebuild keeps its width: resizing it alone
+		// would cut the lines that no longer fit, and a drag would cut
+		// them again at every step.
+		return
+	}
+	lines := t.captureScreenLocked(cx, cy)
+	t.resizeLocked(cols, rows)
+	t.logStale = true
+	// Clear the screen alone — not the history — home the cursor and the
+	// pen, and write the lines as Reflow does: the screen keeps to its
+	// top, as a terminal's does, and the rows a narrower width adds scroll
+	// into the scrollback, as a log's do.
+	if _, err := t.emu.Write([]byte("\x1b[H\x1b[0J\x1b[0m")); err != nil {
+		return
+	}
+	var b strings.Builder
+	for i, line := range lines {
+		if i > 0 {
+			b.WriteString("\r\n")
+		}
+		writeCells(&b, line)
+	}
+	_, _ = t.emu.Write([]byte(b.String()))
+}
+
+// ReflowLog re-wraps the screen and the scrollback at the size the
+// terminal has, which ReflowScreen leaves the scrollback behind at: the
+// screen followed a drag, the history did not. It does nothing when the
+// history is already at that width.
+func (t *Term) ReflowLog() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.logStale {
+		return
+	}
+	t.logStale = false
+	lines, ok := t.captureLocked()
+	if !ok {
+		return
+	}
+	t.rewriteLocked(lines)
+}
+
+// rewriteLocked clears the screen and the scrollback and writes the
+// logical lines at the terminal's size, their wraps following its width.
+func (t *Term) rewriteLocked(lines []vtLine) {
 	// Clear the screen and the scrollback, home the cursor and the pen.
 	if _, err := t.emu.Write([]byte("\x1b[3J\x1b[H\x1b[0m")); err != nil {
 		return
@@ -196,53 +267,102 @@ func (t *Term) Reflow(cols, rows int) {
 // with the lines it wrapped onto joined to it.
 type vtLine []uv.Cell
 
-// captureLocked reads the screen and the scrollback as logical lines, up to
-// the cursor. It reports false when the screen is not a log that ends at the
-// cursor, which a reflow cannot rebuild.
-func (t *Term) captureLocked() ([]vtLine, bool) {
+// Reflowable reports whether Reflow would re-wrap the screen and the
+// scrollback at a new width, rather than resize alone. The panel asks
+// before it re-wraps mid-drag: a resize alone cuts the lines that no longer
+// fit, and a drag would cut them again at every step.
+func (t *Term) Reflowable() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	_, _, ok := t.logEndLocked()
+	return ok
+}
+
+// logEndLocked reports the cursor's column and row when the screen is a log
+// that ends there: nothing right of it nor below it. A reflow can rebuild
+// that; anything else, the alternate screen and a hidden cursor included,
+// belongs to the program.
+func (t *Term) logEndLocked() (cx, cy int, ok bool) {
+	if t.onAlt || t.emu.CursorHidden() {
+		return 0, 0, false
+	}
 	p := t.emu.CursorPosition()
-	cx, cy := p.X, p.Y
+	cx, cy = p.X, p.Y
 	if cy < 0 || cy >= t.rows {
-		return nil, false
+		return 0, 0, false
 	}
 	cx = min(max(cx, 0), t.cols-1)
-	// Nothing right of the cursor, nor below it: a log ends there.
 	for x := cx + 1; x < t.cols; x++ {
 		if occupied(t.emu.CellAt(x, cy)) {
-			return nil, false
+			return 0, 0, false
 		}
 	}
 	for y := cy + 1; y < t.rows; y++ {
 		for x := 0; x < t.cols; x++ {
 			if occupied(t.emu.CellAt(x, y)) {
-				return nil, false
+				return 0, 0, false
 			}
 		}
 	}
+	return cx, cy, true
+}
 
+// captureLocked reads the screen and the scrollback as logical lines, up to
+// the cursor. It reports false when the screen is not a log that ends at the
+// cursor, which a reflow cannot rebuild.
+func (t *Term) captureLocked() ([]vtLine, bool) {
+	cx, cy, ok := t.logEndLocked()
+	if !ok {
+		return nil, false
+	}
 	sb := t.emu.ScrollbackLen()
+	scroll := t.emu.Scrollback()
+	// A drag re-wraps the screen alone: the scrollback may still hold the
+	// wider lines it had then, and reading them at the screen's width would
+	// cut the ends of them off.
+	width := func(y int) int {
+		if y < sb && scroll != nil {
+			return max(t.cols, len(scroll.Line(y)))
+		}
+		return t.cols
+	}
+	return t.linesLocked(sb+cy+1, width, func(x, y int) *uv.Cell {
+		if y < sb {
+			return t.emu.ScrollbackCellAt(x, y)
+		}
+		return t.emu.CellAt(x, y-sb)
+	}, sb+cy, cx), true
+}
+
+// captureScreenLocked reads the screen alone as logical lines, up to the
+// cursor at (cx, cy).
+func (t *Term) captureScreenLocked(cx, cy int) []vtLine {
+	return t.linesLocked(cy+1, func(int) int { return t.cols }, t.emu.CellAt, cy, cx)
+}
+
+// linesLocked reads the first n rows through at as logical lines, joining
+// the rows a line wrapped onto: a row filled to its last column continues on
+// the next, where width says that column. Row curRow ends at column cx,
+// where the cursor sits, so the cells it sits after stay in the line even
+// where they are blank.
+func (t *Term) linesLocked(n int, width func(y int) int, at func(x, y int) *uv.Cell, curRow, cx int) []vtLine {
 	var lines []vtLine
 	prevFull := false
-	for y := 0; y < sb+cy+1; y++ {
-		row := make(vtLine, t.cols)
+	for y := 0; y < n; y++ {
+		w := max(width(y), 1)
+		row := make(vtLine, w)
 		for x := range row {
-			var c *uv.Cell
-			if y < sb {
-				c = t.emu.ScrollbackCellAt(x, y)
-			} else {
-				c = t.emu.CellAt(x, y-sb)
-			}
-			if c != nil {
+			if c := at(x, y); c != nil {
 				row[x] = *c
 			}
 		}
 		last := lastOccupied(row)
-		full := last == t.cols-1
-		n := last + 1
-		if y == sb+cy && n < cx {
-			n = cx // the cells the cursor sits after, blank or not
+		full := last == w-1
+		end := last + 1
+		if y == curRow && end < cx {
+			end = cx
 		}
-		row = row[:n]
+		row = row[:end]
 		switch {
 		case prevFull && len(lines) > 0:
 			lines[len(lines)-1] = append(lines[len(lines)-1], row...)
@@ -251,7 +371,7 @@ func (t *Term) captureLocked() ([]vtLine, bool) {
 		}
 		prevFull = full
 	}
-	return lines, true
+	return lines
 }
 
 // occupied reports whether a cell shows anything but its background.
@@ -455,4 +575,12 @@ func (t *Term) Replies() []byte {
 	out := t.replies
 	t.replies = nil
 	return out
+}
+
+// LogStale reports whether a drag re-wrapped the screen alone: the
+// scrollback keeps the width it had until ReflowLog re-wraps it.
+func (t *Term) LogStale() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.logStale
 }

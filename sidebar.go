@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -33,6 +35,9 @@ const (
 	sidebarMax      = 640
 	sidebarCollapse = 80
 )
+
+// sidebarSlide is how long the sidebar takes to open or close.
+const sidebarSlide = 220 * time.Millisecond
 
 // fuzzyMatch reports whether the runes of query appear in s in order.
 func fuzzyMatch(s, query string) bool {
@@ -242,70 +247,99 @@ func countable(f *fileState) bool {
 	return !f.Binary && !f.Directory && !f.TooLarge
 }
 
+// sidebarInsets is the room the window controls take in the sidebar's
+// title bar, which pads its left and its right with it: the traffic lights
+// on the left of a sidebar on the left, the window buttons on the right of
+// a sidebar on the right.
+func (w *window) sidebarInsets(c *ui.Context) (left, right float32) {
+	bar := c.TitleBar()
+	if w.settings.SidebarPosition == "right" {
+		return 10, max(bar.Right+6, 10)
+	}
+	return max(bar.Left+6, 10), 10
+}
+
 func (w *window) sidebar(c *ui.Context) {
 	t := c.Theme()
 	pal := paletteFor(t)
-	bar := c.TitleBar()
-	sidebarRight := w.settings.SidebarPosition == "right"
-	left, right := max(bar.Left+6, 10), float32(10)
-	if sidebarRight {
-		left, right = 10, max(bar.Right+6, 10)
+	left, right := w.sidebarInsets(c)
+	// The sidebar slides in and out: its width follows the toggle, and the
+	// review beside it follows the width it takes. It keeps its element as
+	// it hides, so that showing it again starts from nothing.
+	col := ui.Column(c.Key("sidebar")).Shrink(0).Background(w.sidebarBg(t)).ClipX()
+	open := float32(0)
+	if w.sidebarShown {
+		open = 1
 	}
-	ui.Column(c).Width(w.sidebarWidth).Shrink(0).Background(w.sidebarBg(t)).Children(func() {
-		// The title bar, under the window controls: the views of the
-		// sidebar and its toggle, centered on the window controls. They
-		// keep to the right, clear of the traffic lights, on macOS, and
-		// to the left elsewhere, where the window buttons are on the right.
-		mac := runtime.GOOS == "darwin"
-		ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(6).DragWindow().Children(func() {
-			if mac {
+	width := w.sidebarWidth * col.Animate("open", open, sidebarSlide)
+	w.sidebarNow = width
+	col.Width(width)
+	if width <= 0 && !w.sidebarShown {
+		return
+	}
+	// The views keep their width as the sidebar slides, and are clipped to
+	// the width it shows: they do not lay out anew at every width on the
+	// way, which would break their lines.
+	col.Children(func() {
+		ui.Column(c.Key("sidebar-body")).Width(w.sidebarWidth).Grow(1).Shrink(0).Children(func() {
+			// The title bar, under the window controls: the toggle of the
+			// sidebar and its views. The toggle keeps to the left, clear of the
+			// window controls and of the views, which the spacer pushes right
+			// while there is room for them beside it.
+			ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(6).DragWindow().Children(func() {
+				w.sidebarToggle(c)
 				ui.Spacer(c)
+				if w.tabControl(c) {
+					w.commitOpen = false
+				}
+			})
+			if w.tab > w.repoTabIndex() {
+				w.tab = 0
 			}
-			if w.tabControl(c) {
-				w.commitOpen = false
-			}
-			w.sidebarToggle(c)
-			if !mac {
-				ui.Spacer(c)
-			}
-		})
-		if w.tab > w.repoTabIndex() {
-			w.tab = 0
-		}
-		ui.Column(c).Padding(2, 10, 8).Children(func() {
+			ui.Column(c).Padding(2, 10, 8).Children(func() {
+				switch {
+				case w.tab == 0:
+					if searchInput(c, &w.filter, "Filter files", &w.filterFocus, &w.typing) {
+						w.matchesFor = "\x00"
+						w.buildTree()
+						w.rowsDirty = true
+					}
+				case w.tab == 1:
+					searchInput(c, &w.historyFilter, "Filter history", &w.filterFocus, &w.typing)
+				case w.tab == w.repoTabIndex():
+					if searchInput(c, &w.repoFilter, "Find a file", &w.filterFocus, &w.typing) {
+						w.buildRepoTree()
+						w.rowsDirty = true
+					}
+				default:
+					searchInput(c, &w.pullsFilter, "Filter pull requests", &w.filterFocus, &w.typing)
+				}
+			})
 			switch {
 			case w.tab == 0:
-				if searchInput(c, &w.filter, "Filter files", &w.filterFocus, &w.typing) {
-					w.matchesFor = "\x00"
-					w.buildTree()
-					w.rowsDirty = true
-				}
+				sidebarTab(c, "files", func() { w.fileTree(c) })
 			case w.tab == 1:
-				searchInput(c, &w.historyFilter, "Filter history", &w.filterFocus, &w.typing)
+				sidebarTab(c, "history", func() { w.historyView(c) })
 			case w.tab == w.repoTabIndex():
-				if searchInput(c, &w.repoFilter, "Find a file", &w.filterFocus, &w.typing) {
-					w.buildRepoTree()
-					w.rowsDirty = true
+				if !w.repoLoaded && !w.repoLoading {
+					w.loadRepoFiles()
 				}
+				sidebarTab(c, "repository", func() { w.repoView(c) })
 			default:
-				searchInput(c, &w.pullsFilter, "Filter pull requests", &w.filterFocus, &w.typing)
+				sidebarTab(c, "pulls", func() { w.pullsView(c) })
 			}
+			w.sidebarFooter(c, pal)
 		})
-		switch {
-		case w.tab == 0:
-			w.fileTree(c)
-		case w.tab == 1:
-			w.historyView(c)
-		case w.tab == w.repoTabIndex():
-			if !w.repoLoaded && !w.repoLoading {
-				w.loadRepoFiles()
-			}
-			w.repoView(c)
-		default:
-			w.pullsView(c)
-		}
-		w.sidebarFooter(c, pal)
 	})
+}
+
+// sidebarTab is a view of the sidebar, which fades and slides in as the
+// tabs change.
+func sidebarTab(c *ui.Context, key string, build func()) {
+	ui.Column(c.Key(key)).Grow(1).MinWidth(0).
+		Transition(ui.ElementTransition{Duration: 150 * time.Millisecond, Ease: ui.EaseOut,
+			Enter: &ui.Motion{Y: 6, Opacity: 0}, Exit: &ui.Motion{Y: 6, Opacity: 0}}).
+		Children(build)
 }
 
 // sidebarBg is the sidebar's background: none on macOS, where the
@@ -338,10 +372,18 @@ func (w *window) tabControl(c *ui.Context) bool {
 		items = append(items, item{iconPull, "Pull Requests (⌘3)"})
 	}
 	items = append(items, item{iconFolderOpen, "Repository (⌘4)"})
+	// The segments fit a narrow sidebar: the toggle and the gaps around it
+	// take 40, and the track pads 2 on each side and 2 between segments.
+	left, right := w.sidebarInsets(c)
+	segW := float32(30)
+	if n := len(items); n > 0 {
+		fit := (w.sidebarWidth - left - right - 40 - 4 - float32(2*(n-1))) / float32(n)
+		segW = min(segW, max(fit, 18))
+	}
 	seg := ui.SegmentedBase(c, &w.tab, len(items))
 	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.12)).Label("Sidebar").Children(func() {
 		for i, it := range items {
-			s := seg.Segment(i).Size(30, 24).Radius(6).Center().Label(it.name).Tooltip(it.name).TextColor(t.TextMuted)
+			s := seg.Segment(i).Size(segW, 24).Radius(6).Center().Label(it.name).Tooltip(it.name).TextColor(t.TextMuted)
 			if i == w.tab {
 				s.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)
 			}
@@ -492,11 +534,21 @@ func (w *window) fileTree(c *ui.Context) {
 		if row.Pressed() && (!selected || w.commitOpen) {
 			choose(key)
 		}
-		if row.Clicked() {
-			if n.dir {
+		if n.dir {
+			if row.Clicked() {
 				w.closedDirs[key] = !w.closedDirs[key]
+				choose(key)
 			}
-			choose(key)
+		} else {
+			f := w.files[n.file]
+			// The menu's file is the one chosen, as the menu opens.
+			row.ContextMenu(func(m *ui.Menu) {
+				w.treeSel = key
+				w.fileMenu(c, m, f.Path, w.canEdit(f))
+			})
+			if row.Clicked() {
+				choose(key)
+			}
 		}
 		muted := t.TextMuted
 		if selected && focused {
@@ -614,6 +666,167 @@ func (w *window) fileTree(c *ui.Context) {
 				}
 			}
 		}
+	}
+}
+
+// filePath is where a file of the work tree lives.
+func (w *window) filePath(path string) string {
+	return filepath.Join(w.repo.Root, filepath.FromSlash(path))
+}
+
+// canEdit reports whether the file tree's actions may change a file of the
+// review: only the work tree's views show files that are there.
+func (w *window) canEdit(f *fileState) bool {
+	if f.Directory || f.Status == diff.Deleted {
+		return false
+	}
+	return w.source.kind == sourceWorkingTree || w.source.kind == sourceBranch
+}
+
+// fileMenu adds the actions of a file of the work tree to a menu, as its
+// row of the tree, its row of the repository and its card show them.
+// editable reports whether the actions may change the file.
+func (w *window) fileMenu(c *ui.Context, m *ui.Menu, path string, editable bool) {
+	if m.Item("Copy Relative Path").Chosen() {
+		c.WriteClipboard(path)
+		c.Toast("Copied " + path)
+	}
+	if m.Item("Copy Absolute Path").Chosen() {
+		c.WriteClipboard(w.filePath(path))
+		c.Toast("Copied " + path)
+	}
+	m.Separator()
+	if m.Item("Rename…").Disabled(!editable).Chosen() {
+		w.startRename(path)
+	}
+	if m.Item("Delete…").Disabled(!editable).Chosen() {
+		w.askingDelete = path
+	}
+}
+
+// startRename asks for the new path of a file of the work tree.
+func (w *window) startRename(path string) {
+	w.renamePath = path
+	w.renameValue = path
+	w.renameErr = ""
+	w.renameBusy = false
+	w.renameOpen = true
+}
+
+// renameDialog asks for a file's new path, relative to the repository.
+func (w *window) renameDialog(c *ui.Context) {
+	t := c.Theme()
+	if !w.renameOpen {
+		return
+	}
+	rename := func() {
+		if w.renameBusy {
+			return
+		}
+		to := filepath.ToSlash(filepath.Clean(filepath.FromSlash(strings.TrimSpace(w.renameValue))))
+		if !filepath.IsLocal(filepath.FromSlash(to)) {
+			w.renameErr = "Enter a path inside the repository."
+			return
+		}
+		if to == w.renamePath {
+			w.renameOpen = false
+			return
+		}
+		from, dest := w.filePath(w.renamePath), w.filePath(to)
+		// Renaming a file to its own name in other letters only changes
+		// its case, as the file system may not tell the two apart.
+		if info, err := os.Stat(dest); err == nil {
+			same := false
+			if old, err := os.Stat(from); err == nil {
+				same = os.SameFile(info, old)
+			}
+			if !same {
+				w.renameErr = "A file already exists at " + to + "."
+				return
+			}
+		}
+		old := w.renamePath
+		w.renameBusy = true
+		w.background(func() {
+			err := os.Rename(from, dest)
+			w.update(func() {
+				w.renameBusy = false
+				if err != nil {
+					w.renameErr = err.Error()
+					return
+				}
+				w.renameOpen = false
+				w.closeBrowse(old)
+				w.refresh()
+				c.Toast("Renamed to " + to)
+			})
+		})
+	}
+	ui.Modal(c, &w.renameOpen, func() {
+		ui.Column(c).Width(440).Gap(14).Children(func() {
+			ui.Column(c).Gap(4).Children(func() {
+				ui.Text(c, "Rename File").FontSize(16).Bold()
+				ui.Text(c, "The path is relative to the repository's root.").FontSize(13).TextColor(t.TextMuted)
+			})
+			ui.Field(c, "New path", func() {
+				if ui.TextInput(c, &w.renameValue).Font(w.codeFont()).AutoFocus().Submitted() {
+					rename()
+				}
+			}).Error(w.renameErr)
+			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+				if ui.Button(c, "Cancel").Clicked() {
+					w.renameOpen = false
+				}
+				label := "Rename"
+				if w.renameBusy {
+					label = "Renaming…"
+				}
+				if ui.PrimaryButton(c, label).Disabled(w.renameBusy).Clicked() {
+					rename()
+				}
+			})
+		})
+	})
+}
+
+// deleteDialog asks to delete the file the menu chose.
+func (w *window) deleteDialog(c *ui.Context) {
+	path := w.askingDelete
+	if path == "" {
+		return
+	}
+	name := filepath.Base(filepath.FromSlash(path))
+	message := "The file is deleted from the working tree. Git can restore a tracked file."
+	for _, f := range w.files {
+		if f.Path == path && f.Status == diff.Untracked {
+			message = "The file is untracked, so this cannot be undone."
+		}
+	}
+	open := true
+	if choice := ui.AlertDialog(c, &open, "Delete "+name+"?", message, "Cancel", "Delete"); choice == 1 {
+		w.askingDelete = ""
+		w.background(func() {
+			err := os.Remove(w.filePath(path))
+			w.update(func() {
+				if err != nil {
+					c.Toast("Could not delete " + name + ": " + err.Error())
+					return
+				}
+				w.closeBrowse(path)
+				w.refresh()
+				c.Toast("Deleted " + name)
+			})
+		})
+	} else if !open {
+		w.askingDelete = ""
+	}
+}
+
+// closeBrowse closes the file the browser shows when path is it.
+func (w *window) closeBrowse(path string) {
+	if w.browse == path {
+		w.browse = ""
+		w.rowsDirty = true
 	}
 }
 

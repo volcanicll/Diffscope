@@ -37,8 +37,9 @@ accent color, dark mode, menus and vibrancy.
 - **Terminal** (<kbd>⌃`</kbd>): a real shell in a pty, under the review or
   beside it (View → Terminal Position), with a tab per session
   (<kbd>⌃⇧`</kbd> opens another). Dragging the divider resizes the panel,
-  and its content re-wraps to the new width; closing the last tab hides
-  the panel. The panel's tab strip has a context menu for all of this too.
+  and its content re-wraps as it moves, the shell's prompt with it; closing
+  the last tab hides the panel. The panel's tab strip has a context menu for
+  all of this too.
 - **Pull requests**: list the open pull requests of the repository's GitHub remote
   (<kbd>⌘3</kbd>) and review any of them, open or not. Diffscope fetches its
   commits into your clone, so it reads as local changes do: highlighted,
@@ -65,6 +66,13 @@ accent color, dark mode, menus and vibrancy.
 - Sidebar navigation selects files, directories, commits and pull requests
   on pointer press, showing the new selection as the sidebar takes focus.
   Directory disclosure and button actions activate on release.
+- **Transitions** as the views switch: the sidebar slides open and closed,
+  the terminal panel slides in under or beside the review, and the sidebar
+  tabs, the commit sheet and a browsed file fade in and out. macOS's
+  Reduce Motion is respected.
+- **A file's right-click menu**, in the file tree, the repository tab and
+  on a file's card: copy its relative or absolute path, or rename and
+  delete it in the work tree, the delete asking first.
 - **File icons** of each kind of file, in its color, drawn as the file tree
   of [@pierre/trees](https://www.npmjs.com/package/@pierre/trees) does.
 

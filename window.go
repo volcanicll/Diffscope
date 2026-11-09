@@ -82,6 +82,9 @@ type window struct {
 	// The sidebar.
 	sidebarShown bool
 	sidebarWidth float32
+	// sidebarNow is the width the sidebar showed as it slid, 0 while it is
+	// closed and the toolbar holds its toggle.
+	sidebarNow   float32
 	tab          int // 0 files, 1 history
 	filter       string
 	filterFocus  bool
@@ -228,6 +231,14 @@ type window struct {
 	dialogErr   string
 	dialogBusy  bool
 
+	// Renaming a file of the work tree, and the one asked to delete.
+	renameOpen   bool
+	renamePath   string // the path the dialog renames, relative
+	renameValue  string
+	renameErr    string
+	renameBusy   bool
+	askingDelete string // the path the alert deletes, relative
+
 	// changed is set when the work tree changed since the last load.
 	changed   bool
 	signature string
@@ -236,15 +247,16 @@ type window struct {
 	// The terminal: its sessions, a tab each, which one shows, whether the
 	// panel shows, how tall the review above it is, how wide the panel
 	// beside it is, and the width its glyphs take.
-	terms        []*termSession
-	termActive   int
-	termShown    bool
-	termSplit    float32
-	termWidth    float32
-	termDrag     float32
-	termResizing bool // the divider between the review and the panel is dragged
-	termFocus    bool
-	termCharW    float32
+	terms       []*termSession
+	termActive  int
+	termShown   bool
+	termClosing bool    // the panel is still built as it slides away
+	termOpen    float32 // how far the panel has opened, 0 to 1
+	termSplit   float32
+	termWidth   float32
+	termDrag    float32
+	termFocus   bool
+	termCharW   float32
 }
 
 var (

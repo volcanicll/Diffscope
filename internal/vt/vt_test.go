@@ -363,3 +363,54 @@ func TestReflowLeavesCursorAddressedScreens(t *testing.T) {
 		t.Errorf("row 2 = %q", got)
 	}
 }
+
+// screensText is every row of the terminal, the scrollback's first, as the
+// cells show them.
+func screensText(term *Term) []string {
+	rows := make([]string, 0, term.Count())
+	for i := 0; i < term.Count(); i++ {
+		rows = append(rows, strings.TrimRight(text(term, i), " "))
+	}
+	return rows
+}
+
+// sameText reports whether two screens say the same, however their lines
+// break: a reflow moves the breaks, not the words.
+func sameText(a, b []string) bool {
+	flat := func(rows []string) string {
+		return strings.Join(strings.Fields(strings.Join(rows, "")), "")
+	}
+	return flat(a) == flat(b)
+}
+
+// ReflowScreen re-wraps the screen alone, as a drag of the panel's divider
+// does: the shell follows the drag at once, and the history the drag leaves
+// behind re-wraps when it rests, with ReflowLog.
+func TestReflowScreenKeepsHistory(t *testing.T) {
+	term := New(20, 4)
+	term.Write([]byte("the first line is long enough to wrap\r\nthe second line too, and long\r\nthird"))
+	before := screensText(term)
+
+	term.ReflowScreen(10, 4)
+	if got := text(term, 0); got != "the first " {
+		t.Errorf("the screen did not re-wrap at 10 columns: row 0 = %q", got)
+	}
+	term.ReflowLog()
+	if got := screensText(term); !sameText(before, got) {
+		t.Errorf("the history lost its text:\n before %q\n after  %q", before, got)
+	}
+}
+
+// A screen re-wrapped narrow leaves history lines wider than the screen,
+// which ReflowLog must read whole rather than cut at its width.
+func TestReflowLogKeepsWiderHistory(t *testing.T) {
+	term := New(30, 4)
+	term.Write([]byte(strings.Repeat("h", 64) + "\r\n12345"))
+	before := screensText(term)
+
+	term.ReflowScreen(12, 4)
+	term.ReflowLog()
+	if got := screensText(term); !sameText(before, got) {
+		t.Errorf("the history lost its ends:\n before %q\n after  %q", before, got)
+	}
+}

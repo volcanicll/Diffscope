@@ -40,31 +40,39 @@ func (w *window) view(c *ui.Context) {
 	reviewBuilt := false
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
 		right := w.settings.SidebarPosition == "right"
-		if w.sidebarShown && !right {
+		// The sidebar is built whether it shows or not: it slides, so the
+		// review beside it follows its width as it opens and closes.
+		if !right {
 			w.sidebar(c)
-			w.sidebarResizer(c, pal)
+			if w.sidebarShown {
+				w.sidebarResizer(c, pal)
+			}
 		}
-		ui.Column(c).Grow(1).MinWidth(0).Background(pal.appBg).Children(func() {
+		ui.Column(c.Key("main")).Grow(1).MinWidth(0).Background(pal.appBg).Children(func() {
 			w.toolbar(c, pal)
+			// The terminal's layout is always built: the panel slides open
+			// and closed inside it, the review taking the room it leaves.
 			if w.termShown {
 				w.ensureTerminals()
-				if w.settings.TerminalPosition == "right" {
-					w.termRight(c, pal, &reviewBuilt)
-				} else {
-					w.termBottom(c, pal, &reviewBuilt)
-				}
+			}
+			if w.settings.TerminalPosition == "right" {
+				w.termRight(c, pal, &reviewBuilt)
 			} else {
-				reviewBuilt = w.mainArea(c, pal)
+				w.termBottom(c, pal, &reviewBuilt)
 			}
 		})
-		if w.sidebarShown && right {
-			w.sidebarResizer(c, pal)
+		if right {
+			if w.sidebarShown {
+				w.sidebarResizer(c, pal)
+			}
 			w.sidebar(c)
 		}
 	})
 	w.shortcuts(c, reviewBuilt)
 	w.palette(c)
 	w.sourceDialog(c)
+	w.renameDialog(c)
+	w.deleteDialog(c)
 	w.shortcutsHelp(c)
 	w.reviewDialog(c)
 	if w.discarding != nil {
@@ -104,7 +112,7 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 	}
 	ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(8).Shrink(0).DragWindow().
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Background(pal.headerBg.Alpha(0.6)).Children(func() {
-		if !w.sidebarShown {
+		if !w.sidebarShown && w.sidebarNow <= 0 {
 			w.sidebarToggle(c)
 		}
 		// The repository: its name, and where it is.
@@ -258,8 +266,25 @@ func (w *window) stageControl(c *ui.Context, pal *palette) {
 }
 
 // mainArea shows the review, the commit view, or why there is nothing,
-// and reports whether it built the review list in this pass.
+// and reports whether it built the review list in this pass. The review,
+// a commit's sheet and a browsed file fade into one another.
 func (w *window) mainArea(c *ui.Context, pal *palette) bool {
+	key := "review"
+	switch {
+	case w.browse != "":
+		key = "browse"
+	case w.commitOpen && w.source.kind == sourceWorkingTree:
+		key = "commit"
+	}
+	built := false
+	ui.Column(c.Key(key)).Grow(1).MinWidth(0).
+		Transition(ui.ElementTransition{Duration: 180 * time.Millisecond, Ease: ui.EaseOut,
+			Enter: &ui.Motion{Y: 6, Opacity: 0}, Exit: &ui.Motion{Y: 6, Opacity: 0}}).
+		Children(func() { built = w.mainAreaBody(c, pal) })
+	return built
+}
+
+func (w *window) mainAreaBody(c *ui.Context, pal *palette) bool {
 	t := c.Theme()
 	if w.browse != "" {
 		w.browseView(c, pal)
@@ -452,7 +477,7 @@ func (w *window) shortcuts(c *ui.Context, reviewBuilt bool) {
 	// had the focus in the last frame.
 	typing := w.typing
 	w.typing = false
-	if w.commitOpen || w.paletteOpen || w.dialogOpen || w.help || typing || !reviewBuilt || (w.pr != nil && w.pr.submitOpen) {
+	if w.commitOpen || w.paletteOpen || w.dialogOpen || w.renameOpen || w.askingDelete != "" || w.help || typing || !reviewBuilt || (w.pr != nil && w.pr.submitOpen) {
 		return
 	}
 	if c.Shortcut(0, ui.KeyJ) || c.Shortcut(ui.Ctrl, ui.KeyDown) {

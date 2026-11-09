@@ -55,6 +55,10 @@ type termSession struct {
 	// ptyCols, ptyRows are the size the pty last carried, to keep its
 	// sync with the emulator when the shell starts late.
 	ptyCols, ptyRows int
+	// winchAt is when the pty last heard of a width that was changing,
+	// which paces the next SIGWINCH; changeAt is when the pane's width
+	// last changed, which tells a drag's frames from a width at rest.
+	winchAt, changeAt time.Time
 }
 
 // termCell is a place on the screen: a view row, counting the
@@ -193,22 +197,49 @@ func (s *termSession) resize(cols, rows int) {
 	}
 	c, r := s.term.Size()
 	changed := c != cols || r != rows
-	if changed {
-		// A dragged divider changes the pane every frame; reflow once it
-		// rests, rather than re-wrapping the scrollback at every step.
-		if s.w.termResizing {
-			return
-		}
-		s.term.Reflow(cols, rows)
-		if c != cols {
-			s.clearSelection()
+	widthChanged := changed && c != cols
+	switch {
+	case widthChanged && s.term.Reflowable():
+		// The pane is being widened or narrowed, by the divider, the
+		// sidebar or the window: the screen re-wraps at once, so the text
+		// follows the pointer. The history waits until the width rests —
+		// a line filled to its width is taken for a wrapped one, and
+		// joining those again and again at passing widths would garble
+		// the text — and re-wraps whole then.
+		s.term.ReflowScreen(cols, rows)
+		s.changeAt = time.Now()
+		s.clearSelection()
+	case changed:
+		// A taller or shorter pane shows more or fewer rows, but the
+		// lines wrap the same; so does a screen a reflow cannot rebuild,
+		// whose program lays it out anew at the size it takes.
+		s.term.Resize(cols, rows)
+	default:
+		// The width rested: the history takes the width the screen took.
+		// A frame between two of a drag's comes here too; the pace tells
+		// them apart.
+		if time.Since(s.changeAt) >= termReflowRate {
+			s.term.ReflowLog()
+			s.changeAt = time.Time{}
 		}
 	}
+	now := time.Now()
 	s.mu.Lock()
+	if !changed {
+		// The width rests: a change that comes next tells the shell at
+		// once.
+		s.winchAt = time.Time{}
+	}
 	tty := s.tty
 	due := tty != nil && (s.ptyCols != cols || s.ptyRows != rows)
+	// A shell redraws its prompt on every SIGWINCH: while the width keeps
+	// changing it hears of it some times a second, and once it rests.
+	if due && (widthChanged && now.Sub(s.winchAt) < termReflowRate) {
+		due = false
+	}
 	if due {
 		s.ptyCols, s.ptyRows = cols, rows
+		s.winchAt = now
 	}
 	s.mu.Unlock()
 	if due {
@@ -604,10 +635,21 @@ func (w *window) saveTermLayout() {
 	go state.setTermLayout(split, width, shown)
 }
 
+// termSlide is how long the terminal panel takes to open or close.
+const termSlide = 220 * time.Millisecond
+
+// termReflowRate paces the shell while the pane's width changes: it hears
+// of the new size some times a second, and the history re-wraps once the
+// width has rested that long. Often enough that the prompt follows the
+// drag, rarely enough that its redraws do not flit between frames.
+const termReflowRate = 90 * time.Millisecond
+
 // toggleTerminal shows the terminal panel, or hides it with the shells
 // running on, and starts a session the first time.
 func (w *window) toggleTerminal() {
 	w.termShown = !w.termShown
+	// Closing, the panel stays built until its slide is over.
+	w.termClosing = !w.termShown
 	if w.termShown {
 		w.ensureTerminals()
 		w.termFocus = true
@@ -737,37 +779,93 @@ const (
 	termMinWidth     = 320
 )
 
+// termFactor animates the panel's opening from 0 to 1, and is 1 while it
+// shows and 0 while it hides. It ends the close once the slide is over.
+func (w *window) termFactor(c *ui.Context, el ui.Element) float32 {
+	target := float32(0)
+	if w.termShown {
+		target = 1
+	}
+	f := el.Animate("open", target, termSlide)
+	w.termOpen = f
+	if w.termClosing && f <= 0 {
+		w.termClosing = false
+	}
+	return f
+}
+
 // termBottom puts the terminal under the review, the line between them
-// dragging the review's height.
+// dragging the review's height. The panel slides: the review takes the
+// room it leaves as it opens.
 func (w *window) termBottom(c *ui.Context, pal *palette, reviewBuilt *bool) {
+	_, height := c.Size()
+	total := max(height-titleBarHeight, 1)
 	if w.termSplit == 0 {
 		// The terminal takes the bottom 300 or so, once.
-		_, height := c.Size()
-		w.termSplit = max(height-titleBarHeight-300, 180)
+		w.termSplit = max(total-300, 180)
 	}
-	// The split takes the room under the toolbar: grown, it gives the
-	// panels beneath its line a height to fill, which the terminal's
-	// screen takes its rows from.
-	ui.SplitVertical(c, &w.termSplit, func() {
-		*reviewBuilt = w.mainArea(c, pal)
-	}, func() {
-		w.termPanel(c, pal)
-	}).Grow(1).MinHeight(0)
+	wrap := ui.Column(c.Key("terminal")).Grow(1).MinHeight(0)
+	factor := w.termFactor(c, wrap)
+	panel := max(total-w.termSplit, 0) * factor
+	wrap.Children(func() {
+		ui.Box(c).Grow(1).Shrink(1).MinHeight(0).Clip().Children(func() {
+			*reviewBuilt = w.mainArea(c, pal)
+		})
+		if factor > 0 {
+			w.termBottomResizer(c, pal, total)
+		}
+		ui.Box(c).Height(panel).Shrink(0).Clip().Children(func() {
+			if factor > 0 {
+				w.termPanel(c, pal)
+			}
+		})
+	})
+}
+
+// termBottomResizer is the line between the review and the terminal under
+// it: dragging it gives the review more or less height.
+func (w *window) termBottomResizer(c *ui.Context, pal *palette, total float32) {
+	ui.Box(c).Height(1).Shrink(0).Background(pal.cardBorder).Children(func() {
+		handle := ui.Box(c).Absolute().Top(-4).Left(0).Right(0).Height(9).Cursor(ui.CursorResizeNS)
+		if _, dy, held := handle.Dragged(); held {
+			// The review above grows as the line goes down.
+			w.termDrag += dy
+			minPane := c.Theme().Space(10)
+			w.termSplit = min(max(w.termDrag, minPane), max(total-1-minPane, minPane))
+		} else {
+			if w.termDrag != 0 && w.termDrag != w.termSplit {
+				w.saveTermLayout()
+			}
+			w.termDrag = w.termSplit
+		}
+	})
 }
 
 // termRight puts the terminal beside the review, the line between them
-// dragging its width.
+// dragging its width. The panel slides: the review takes the room it
+// leaves as it opens.
 func (w *window) termRight(c *ui.Context, pal *palette, reviewBuilt *bool) {
 	if w.termWidth == 0 {
 		w.termWidth = termDefaultWidth
 	}
-	ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+	wrap := ui.Row(c.Key("terminal")).Grow(1).MinWidth(0).AlignItems(ui.Stretch)
+	factor := w.termFactor(c, wrap)
+	wrap.Children(func() {
 		ui.Box(c).Grow(1).Shrink(1).MinWidth(0).Clip().Children(func() {
 			*reviewBuilt = w.mainArea(c, pal)
 		})
-		w.termResizer(c, pal)
-		ui.Box(c).Width(w.termWidth).Shrink(0).Clip().Children(func() {
-			w.termPanel(c, pal)
+		if factor > 0 {
+			w.termResizer(c, pal)
+		}
+		ui.Box(c).Width(w.termWidth * factor).Shrink(0).Clip().Children(func() {
+			if factor <= 0 {
+				return
+			}
+			// The panel keeps its width as it slides, clipped to what
+			// shows: its lines do not wrap anew at every width on the way.
+			ui.Box(c).Width(w.termWidth).Grow(1).Children(func() {
+				w.termPanel(c, pal)
+			})
 		})
 	})
 }
@@ -778,14 +876,12 @@ func (w *window) termResizer(c *ui.Context, pal *palette) {
 	ui.Box(c).Width(1).Shrink(0).Background(pal.cardBorder).Children(func() {
 		handle := ui.Box(c).Absolute().Top(0).Bottom(0).Left(-4).Width(9).Cursor(ui.CursorResizeEW)
 		if dx, _, held := handle.Dragged(); held {
-			w.termResizing = true
 			// The panel sits on the right: dragging the line left (dx < 0)
 			// widens it, the opposite of the sidebar on the left.
 			w.termDrag -= dx
 			total, _ := c.Size()
 			w.termWidth = min(max(w.termDrag, termMinWidth), max(total-360, termMinWidth))
 		} else {
-			w.termResizing = false
 			if w.termDrag != 0 && w.termDrag != w.termWidth {
 				w.saveTermLayout()
 			}
@@ -920,13 +1016,21 @@ func (w *window) termGrid(c *ui.Context, pal *palette, s *termSession) {
 			// The tabs it does not show take the same pane: their shells
 			// follow it, rather than when the user comes back to one. A shell
 			// not started yet starts here, at the size it will print in.
+			// While the pane is being resized, this is also what re-wraps
+			// the screen and tells the shells the new size.
 			for _, other := range w.terms {
 				other.resize(cols, rows)
 				other.startPending()
 			}
+			// A drag leaves the history at the width it had, to re-wrap
+			// whole once the width rests: ask for the frame that does it.
+			if s.term.LogStale() {
+				c.After(termReflowRate)
+			}
 		}
 	}
-	ui.List(c, &s.list, s.term.Count(), func(i int) { w.termRow(c, pal, s, i, lh, cw) }).
+	count := s.term.Count()
+	ui.List(c, &s.list, count, func(i int) { w.termRow(c, pal, s, i, lh, cw) }).
 		Grow(1).MinHeight(0).Background(pal.term.bg).Font(w.termFont()).FontSize(w.codeSize()).
 		HandleInput(w.termInput).
 		HandleTextInput(s.text).
@@ -973,7 +1077,10 @@ func (w *window) termRow(c *ui.Context, pal *palette, s *termSession, i int, lh,
 	// Away from the terminal, the cursor shows hollow, as the terminals
 	// draw the caret of an unfocused pane.
 	focused := s.list.FocusWithin(c)
-	runs := w.termRuns(&pal.term, s, i, focused)
+	s.buf = s.term.Line(i, s.buf)
+	cursor := s.term.Cursor()
+	glyphs, cur := s.buf, &cursor
+	runs := w.termRuns(&pal.term, s, glyphs, i, cur, focused)
 	if len(runs) == 0 {
 		ui.Box(c).Height(lh).FillWidth().Shrink(0)
 		return
@@ -998,12 +1105,9 @@ func (w *window) termRow(c *ui.Context, pal *palette, s *termSession, i int, lh,
 			}
 			// The input method's composition draws over the screen at the
 			// cursor, underlined, as the terminals show it.
-			if s.text != nil && s.text.marked != "" {
-				cur := s.term.Cursor()
-				if i == cur.ViewY {
-					p.RichText(r.X+float32(cur.X)*cw, r.Y, r.W-float32(cur.X)*cw,
-						ui.Span{Text: s.text.marked, Color: pal.term.fg, Font: w.termFont(), Size: w.codeSize(), Underline: true})
-				}
+			if cur != nil && s.text != nil && s.text.marked != "" && i == cur.ViewY {
+				p.RichText(r.X+float32(cur.X)*cw, r.Y, r.W-float32(cur.X)*cw,
+					ui.Span{Text: s.text.marked, Color: pal.term.fg, Font: w.termFont(), Size: w.codeSize(), Underline: true})
 			}
 		}).
 		Children(func() {
@@ -1030,13 +1134,11 @@ func (w *window) termRow(c *ui.Context, pal *palette, s *termSession, i int, lh,
 		})
 }
 
-// termRuns flattens row i of the emulator into runs of one color,
-// merging the neighbors that agree. A focused terminal's cursor cell
-// paints over its character; a hollow one lets the character show.
-func (w *window) termRuns(tp *termPalette, s *termSession, i int, focused bool) []termRun {
-	term := s.term
-	s.buf = term.Line(i, s.buf)
-	cur := term.Cursor()
+// termRuns flattens a row of glyphs into runs of one color, merging the
+// neighbors that agree. A focused terminal's cursor cell paints over its
+// character; a hollow one lets the character show. A nil cursor, as the
+// rows a drag shows, shows none.
+func (w *window) termRuns(tp *termPalette, s *termSession, glyphs []vt.Glyph, row int, cur *vt.Cursor, focused bool) []termRun {
 	// The cursor shows in its half of the blink when the panel is idle;
 	// output resets nothing, as a terminal at work hardly blinks.
 	cursorOn := time.Now().UnixMilli()/600%2 == 0
@@ -1056,7 +1158,7 @@ func (w *window) termRuns(tp *termPalette, s *termSession, i int, focused bool) 
 		}
 		run = termRun{}
 	}
-	for x, g := range s.buf {
+	for x, g := range glyphs {
 		if g.Width == 0 {
 			continue // the shadow of a wide character
 		}
@@ -1081,12 +1183,12 @@ func (w *window) termRuns(tp *termPalette, s *termSession, i int, focused bool) 
 		r.italic = g.Attr&vt.AttrItalic != 0
 		r.underline = g.Underline
 		r.strike = g.Attr&vt.AttrStrike != 0
-		if hasSel && withinSelection(a, b, termCell{i, x}) {
+		if hasSel && withinSelection(a, b, termCell{row, x}) {
 			r.fill, r.fills = tp.selection, true
 		} else if fillsBg {
 			r.fill, r.fills = bg, true
 		}
-		if !composing && cur.Visible && i == cur.ViewY && x == cur.X && (cursorOn || !focused) {
+		if !composing && cur != nil && cur.Visible && row == cur.ViewY && x == cur.X && (cursorOn || !focused) {
 			r.cursor = true
 			r.fill, r.fills = tp.cursor, true
 			if focused {

@@ -76,7 +76,14 @@ else stays.
 
 - `sidebar.go`: the master–detail. The file tree carries status letters
   (M, A, D, U) and change counts, its disclosure opens on release, and its
-  selection drives which cards open. The history tab lists
+  selection drives which cards open. A file's context menu (`fileMenu`)
+  copies its paths, renames it or deletes it in the work tree; the file's
+  card and the repository tab offer the same. The sidebar is built even
+  when hidden: `Animate` slides its width to zero and back (`sidebarNow`),
+  the review following it, while its views keep the width they lay out at
+  and are clipped to what shows. Its tabs, and the review, the commit
+  sheet and a browsed file, swap with `Transition` enters and exits. The
+  history tab lists
   `repo.Log()`'s commits. The pull requests tab lists
   `internal/github`'s open pulls of the remote (`upstream`, else
   `origin`).
@@ -103,10 +110,22 @@ else stays.
   pty with the login environment (`internal/shellenv`), reads its output
   into `internal/vt` and draws the rows as a list; ending it kills the
   shell's process group, children included. Tabs hold the sessions; the
-  panel sits under the review or beside it. The shell starts once the
-  first frame has measured the panel, so its greeting wraps at the width
-  it is read at — and `Term.Reflow` re-wraps the screen and scrollback when
-  the width changes later.
+  panel sits under the review or beside it, sliding open and closed as
+  `termFactor` animates its share while the review takes the room it
+  leaves. Beside the review the panel keeps the width it lays out at and
+  is clipped to the animated one, so its lines do not wrap anew on every
+  frame of the slide. The shell starts once the first frame has measured
+  the panel, so its greeting wraps at the width it is read at — and
+  `Term.Reflow` re-wraps the screen and the scrollback when the width
+  changes later. While the pane is being resized — its divider dragged,
+  the sidebar dragged or sliding, the window resized — the screen re-wraps
+  at once, every frame, with `Term.ReflowScreen`, so the text follows the
+  pointer; the pty hears of the width some times a second, so the prompt a
+  shell redraws follows too without flitting. The history keeps the width
+  it had until the resize rests, and `Term.ReflowLog` then re-wraps it
+  whole: a line filled to its width is taken for a wrapped one, and
+  joining those again and again at passing widths would garble the text.
+  A change of height alone only resizes.
 
 ## The packages
 
@@ -160,8 +179,10 @@ keyboard and the session ask about (title, cursor, modes, scrollback,
 alternate screen). The wrapper adds `Reflow`, which rewrites the screen
 and scrollback at a new width from their cells — the width a line wrapped
 at is not recorded, so a line filled to its last column counts as a
-continued one. It leaves the alternate screen, a hidden cursor and
-cursor-addressed layouts alone, because those belong to the program.
+continued one. `ReflowScreen` re-wraps the screen alone, which a dragged
+divider goes by, and `ReflowLog` then re-wraps the history whole, at the
+width the screen took. Each leaves the alternate screen, a hidden cursor
+and cursor-addressed layouts alone, because those belong to the program.
 
 ### internal/proc, internal/shellenv
 

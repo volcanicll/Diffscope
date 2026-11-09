@@ -182,12 +182,18 @@ func (w *window) repoView(c *ui.Context) {
 		case row.Hovered():
 			row.Background(ui.RGBA(127, 127, 127, 0.08))
 		}
-		if row.Clicked() {
-			if n.dir {
+		if n.dir {
+			if row.Clicked() {
 				w.closedDirs[key] = !w.closedDirs[key]
 				w.buildRepoTree()
 				w.rowsDirty = true
-			} else {
+			}
+		} else {
+			// The file's row offers its actions, which the work tree holds.
+			row.ContextMenu(func(m *ui.Menu) {
+				w.fileMenu(c, m, n.path, true)
+			})
+			if row.Clicked() {
 				w.showBrowse(n.path)
 			}
 		}
@@ -345,8 +351,13 @@ func (w *window) browseView(c *ui.Context, pal *palette) {
 	t := c.Theme()
 	path := w.browse
 	ui.Column(c).Grow(1).Background(pal.appBg).Children(func() {
-		ui.Row(c).Height(46).Padding(0, 12).Gap(8).Shrink(0).
-			Background(pal.headerBg).Border(1, pal.cardBorder).Children(func() {
+		head := ui.Row(c).Height(46).Padding(0, 12).Gap(8).Shrink(0).
+			Background(pal.headerBg).Border(1, pal.cardBorder)
+		// The file shown offers its actions, right here, too.
+		head.ContextMenu(func(m *ui.Menu) {
+			w.fileMenu(c, m, path, true)
+		})
+		head.Children(func() {
 			if iconButton(c, iconClose, "Close the file (esc)").Clicked() {
 				w.browse = ""
 				w.rowsDirty = true

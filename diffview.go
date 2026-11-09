@@ -192,9 +192,7 @@ func (w *window) fileHeader(c *ui.Context, pal *palette, idx int, f *fileState, 
 		if m.Item("Open in Editor").Disabled(f.Status == diff.Deleted).Chosen() {
 			w.openInEditor(f.Path, firstLine(f))
 		}
-		if m.Item("Copy Path").Chosen() {
-			c.WriteClipboard(f.Path)
-		}
+		w.fileMenu(c, m, f.Path, w.canEdit(f))
 		if m.Item("Viewed").Checked(viewed).Chosen() {
 			w.setViewed(f, !viewed)
 		}
@@ -586,7 +584,7 @@ func (w *window) lineCell(c *ui.Context, pal *palette, f *fileState, r *row, s l
 		if m.Item("Open in Editor").Disabled(f.Status == diff.Deleted).Chosen() {
 			w.openInEditor(f.Path, line)
 		}
-		if m.Item("Copy Path").Chosen() {
+		if m.Item("Copy Relative Path").Chosen() {
 			c.WriteClipboard(f.Path)
 		}
 	})
