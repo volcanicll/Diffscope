@@ -181,7 +181,9 @@ would otherwise take its windows. `DIFFSCOPE_CPUPROFILE=<file>` and
 
 The landing page is `site/index.html`: one self-contained file, with no
 build step. Open it in a browser, or serve `site/` to preview it at a
-local address.
+local address. Pushes that change `site/` deploy it to GitHub Pages
+(https://volcanicll.github.io/Diffscope/) through
+`.github/workflows/pages.yml`.
 
 The code is in a few parts:
 
