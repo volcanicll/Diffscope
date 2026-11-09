@@ -5,6 +5,9 @@ them, in Go with [MyGo](https://mygo.egoist.dev/)'s native UI. No webview, no
 JavaScript: the window is drawn by MyGo on the GPU, with the system's fonts,
 accent color, dark mode, menus and vibrancy.
 
+[Website](https://volcanicll.github.io/Diffscope/) ·
+[Download](https://github.com/volcanicll/Diffscope/releases)
+
 <img src="docs/screenshot.png" width="1128" alt="Diffscope reviewing the changes of a repository, in a split diff with syntax highlighting" />
 
 ## Features
