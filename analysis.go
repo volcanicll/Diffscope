@@ -42,6 +42,11 @@ type analysisState struct {
 	checked bool
 }
 
+// aiReviewEnabled masks the AI pre-review: no sparkle, no strip, no
+// notes, no grouping by an agent's review. The code stays for a later
+// build; the shipped app hides every entry to it.
+var aiReviewEnabled = false
+
 // runAgent runs an agent; tests replace it.
 var runAgent = agent.Run
 
@@ -68,6 +73,9 @@ func (w *window) analysisResult() *agent.Analysis {
 // showSummary reports whether the surface shows the agent's review: once
 // there is one, one under way, one that failed, or one offered.
 func (w *window) showSummary() bool {
+	if !aiReviewEnabled {
+		return false
+	}
 	st := w.analyses[w.source]
 	return st != nil && (st.result != nil || st.running || st.err != "" || st.offered)
 }
@@ -95,6 +103,9 @@ type savedAnalysis struct {
 
 // loadAnalysis reads the review saved of a source, once.
 func (w *window) loadAnalysis(src source) {
+	if !aiReviewEnabled {
+		return
+	}
 	st := w.analysisFor(src)
 	if st.checked {
 		return
@@ -141,6 +152,9 @@ func saveAnalysis(path string, a *agent.Analysis, fingerprints map[string]string
 // runAnalysis asks the agent of the settings, else the first installed, to
 // review the changes shown.
 func (w *window) runAnalysis() {
+	if !aiReviewEnabled {
+		return
+	}
 	src := w.source
 	st := w.analysisFor(src)
 	if st.running || len(w.files) == 0 || w.loading {
@@ -222,6 +236,7 @@ func (w *window) runAnalysis() {
 				st.err = err.Error()
 			default:
 				st.result, st.fingerprints, st.err = an, fingerprints, ""
+				st.folded = true
 			}
 			if w.source == src {
 				w.regroupSoon()
@@ -232,6 +247,9 @@ func (w *window) runAnalysis() {
 
 // stopAnalysis stops the agent at work on the source shown.
 func (w *window) stopAnalysis() {
+	if !aiReviewEnabled {
+		return
+	}
 	if st := w.analyses[w.source]; st != nil && st.cancel != nil {
 		st.cancel()
 	}
@@ -256,16 +274,101 @@ func (w *window) changedSince(st *analysisState) int {
 	return n
 }
 
-// summaryCard shows the agent's review of the changes: its summary, or
-// what it does while at work.
+// summaryCard shows the agent's review as a quiet strip, with the summary
+// and the notes folded under it until asked for.
 func (w *window) summaryCard(c *ui.Context, pal *palette) ui.Element {
 	t := c.Theme()
 	st := w.analyses[w.source]
-	return ui.Column(c).Padding(12, 16).Gap(8).Radius(cardRadius).Background(pal.headerBg).Border(1, t.Accent.Alpha(0.3)).Children(func() {
-		ui.Row(c).Gap(8).Children(func() {
-			ui.Icon(c, iconSparkle).FontSize(15).TextColor(t.Accent)
-			ui.Text(c, "AI Review").FontSize(14).Bold().Shrink(0)
-			if a := st.result; a != nil && !st.running {
+	if st == nil {
+		return ui.Box(c).Height(0)
+	}
+	return ui.Column(c).Children(func() {
+		ui.Row(c).Height(36).Shrink(0).Padding(0, 12).Gap(8).Background(pal.headerBg).
+			BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Children(func() {
+			ui.Icon(c, iconSparkle).FontSize(14).TextColor(t.Accent)
+			switch {
+			case st.running:
+				ui.Spinner(c).Size(13, 13)
+				who := st.agent
+				if who == "" {
+					who = "The agent"
+				}
+				ui.Text(c, who+": "+st.progress).FontSize(12).TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+				elapsed := w.now.Sub(st.started).Truncate(time.Second)
+				ui.Text(c, elapsed.String()).Font(w.codeFont()).FontSize(10.5).TextColor(t.TextMuted).Shrink(0)
+				if ui.Button(c, "").Height(24).Children(func() {
+					ui.Icon(c, iconStop).FontSize(11)
+					ui.Text(c, "Stop")
+				}).Clicked() {
+					w.stopAnalysis()
+				}
+				c.After(time.Second)
+			case st.err != "":
+				ui.Icon(c, iconAlert).FontSize(13).TextColor(t.Danger)
+				ui.Text(c, st.err).FontSize(12).TextColor(t.Danger).SingleLine().Grow(1).Shrink(1).MinWidth(0).Tooltip(st.err)
+				if ui.Button(c, "Try Again").Height(24).Clicked() {
+					w.runAnalysis()
+				}
+			case st.result != nil:
+				notes := w.orderedNotes()
+				care := st.result.Critical()
+				ui.Text(c, plural(len(notes), "note")).FontSize(12).TextColor(t.TextMuted)
+				if care > 0 {
+					ui.Textf(c, "· %d %s care", care, map[bool]string{true: "needs", false: "need"}[care == 1]).
+						FontSize(11).FontWeight(600).TextColor(t.Danger)
+				}
+				if n := w.changedSince(st); n > 0 {
+					ui.Textf(c, "· %s changed since", plural(n, "file")).FontSize(11).TextColor(pal.ref).
+						Tooltip("Notes on the files changed since do not show. Review again to include them.")
+				}
+				ui.Spacer(c)
+				label := "Show notes"
+				if !st.folded {
+					label = "Hide notes"
+				}
+				if ui.ButtonBase(c).Height(24).Padding(0, 6).Radius(5).Label(label).Children(func() {
+					ui.Text(c, label).FontSize(11.5).FontWeight(600).TextColor(t.Accent)
+				}).Clicked() {
+					st.folded = !st.folded
+					w.rowsDirty = true
+				}
+				if ui.ButtonBase(c).Height(24).Padding(0, 6).Radius(5).Label("Review Again").Children(func() {
+					ui.Text(c, "Review Again").FontSize(11.5).TextColor(t.TextMuted)
+				}).Clicked() {
+					w.runAnalysis()
+				}
+			default:
+				ui.Text(c, st.agent).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+				ui.Spacer(c)
+				w.agentMenu(c)
+				w.modelMenu(c)
+				if ui.PrimaryButton(c, "Review with AI").Height(24).Clicked() {
+					w.runAnalysis()
+				}
+				if iconButton(c, iconClose, "Dismiss").Size(24, 24).Clicked() {
+					st.offered = false
+					if w.groupPref == groupAI {
+						w.groupPref = groupAuto
+					}
+					w.regroupSoon()
+				}
+			}
+		})
+		if st.result != nil && !st.folded && !st.running {
+			w.summaryDetail(c, pal, st)
+		}
+	})
+}
+
+// summaryDetail is the part of the review that waits under the strip: the
+// summary, the counts and the notes.
+func (w *window) summaryDetail(c *ui.Context, pal *palette, st *analysisState) {
+	t := c.Theme()
+	a := st.result
+	ui.Row(c).Background(pal.headerBg).Padding(0, 12, 10).Children(func() {
+		ui.Column(c).MaxWidth(640).FillWidth().Padding(8, 10).Gap(6).Radius(8).
+			Background(pal.codeBg).Border(1, pal.cardBorder).Children(func() {
+			if a != nil {
 				by := a.Agent
 				if ag, ok := agent.ByName(a.Agent); ok {
 					by = ag.Label
@@ -274,108 +377,32 @@ func (w *window) summaryCard(c *ui.Context, pal *palette) ui.Element {
 					by += " · " + a.Model
 				}
 				by += " · " + relativeTime(w.now, a.GeneratedAt)
-				ui.Text(c, by).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+				ui.Text(c, by).FontSize(10.5).TextColor(t.TextMuted)
 			}
-			ui.Spacer(c)
-			if st.result == nil && !st.running && st.err == "" {
-				// Offered: nothing runs until asked.
-				w.agentMenu(c)
-				w.modelMenu(c)
-				if ui.PrimaryButton(c, "Review with AI").Height(26).Clicked() {
-					w.runAnalysis()
+			if s := strings.TrimSpace(a.OverallSummary); s != "" {
+				ui.Text(c, s).FontSize(12.5).Selectable()
+			}
+			notes := 0
+			for _, g := range a.Groups {
+				notes += len(g.FileNotes) + len(g.LineNotes)
+			}
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Textf(c, "%s · %s", plural(len(a.Groups), "group"), plural(notes, "note")).
+					FontSize(10.5).TextColor(t.TextMuted)
+				if n := a.Critical(); n > 0 {
+					ui.Textf(c, "%d to take care with", n).FontSize(10.5).FontWeight(600).TextColor(t.Danger)
 				}
-				if iconButton(c, iconClose, "Dismiss").Size(26, 26).Clicked() {
-					st.offered = false
-					if w.groupPref == groupAI {
-						w.groupPref = groupAuto
+				ui.Spacer(c)
+				if w.grouping() != groupAI {
+					if ui.ButtonBase(c).Children(func() {
+						ui.Text(c, "Group files by this review").FontSize(10.5).FontWeight(600).TextColor(t.Accent)
+					}).Clicked() {
+						w.setGrouping(groupAI)
 					}
-					w.regroupSoon()
 				}
-				return
-			}
-			if st.running {
-				if ui.Button(c, "").Height(26).Children(func() {
-					ui.Icon(c, iconStop).FontSize(12)
-					ui.Text(c, "Stop")
-				}).Clicked() {
-					w.stopAnalysis()
-				}
-				return
-			}
-			w.agentMenu(c)
-			w.modelMenu(c)
-			label := "Review Again"
-			if st.result == nil {
-				label = "Try Again"
-			}
-			if ui.Button(c, label).Height(26).Clicked() {
-				w.runAnalysis()
-			}
-			if st.result != nil {
-				tip := "Hide the summary"
-				if st.folded {
-					tip = "Show the summary"
-				}
-				b := iconButton(c, iconChevronDown, tip).Size(26, 26)
-				if b.Clicked() {
-					st.folded = !st.folded
-				}
-			}
-		})
-		if st.running {
-			ui.Row(c).Gap(8).Children(func() {
-				ui.Spinner(c).Size(14, 14)
-				who := st.agent
-				if who == "" {
-					who = "The agent"
-				}
-				ui.Text(c, who+": "+st.progress).FontSize(12).TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0)
-				elapsed := w.now.Sub(st.started).Truncate(time.Second)
-				ui.Text(c, elapsed.String()).Font(w.codeFont()).FontSize(11).TextColor(t.TextMuted).Shrink(0)
-				c.After(time.Second)
 			})
-		}
-		if st.result == nil && !st.running && st.err == "" {
-			ui.Text(c, "A coding agent on this machine can summarize these changes, group the files by intent and note what deserves attention. It reads, never writes, and starts only when you ask.").
-				FontSize(13).TextColor(t.TextMuted)
-		}
-		if st.err != "" {
-			ui.Text(c, st.err).FontSize(12).TextColor(t.Danger).Selectable().MaxLines(6)
-		}
-		a := st.result
-		if a == nil || st.folded || st.running {
-			return
-		}
-		if s := strings.TrimSpace(a.OverallSummary); s != "" {
-			ui.Text(c, s).FontSize(13).Selectable()
-		}
-		notes := 0
-		for _, g := range a.Groups {
-			notes += len(g.FileNotes) + len(g.LineNotes)
-		}
-		ui.Row(c).Gap(10).Children(func() {
-			ui.Textf(c, "%s · %s", plural(len(a.Groups), "group"), plural(notes, "note")).FontSize(12).TextColor(t.TextMuted)
-			if n := a.Critical(); n > 0 {
-				ui.Row(c).Gap(4).Children(func() {
-					ui.Icon(c, iconAlert).FontSize(12).TextColor(t.Danger)
-					ui.Textf(c, "%d to take care with", n).FontSize(12).FontWeight(600).TextColor(t.Danger)
-				})
-			}
-			if n := w.changedSince(st); n > 0 {
-				ui.Textf(c, "%s changed since", plural(n, "file")).FontSize(12).TextColor(pal.ref).
-					Tooltip("Notes on the files changed since do not show. Review again to include them.")
-			}
-			ui.Spacer(c)
-			if w.grouping() != groupAI {
-				b := ui.ButtonBase(c).Children(func() {
-					ui.Text(c, "Group files by this review").FontSize(12).FontWeight(600).TextColor(t.Accent)
-				})
-				if b.Clicked() {
-					w.setGrouping(groupAI)
-				}
-			}
+			w.noteList(c, pal, st)
 		})
-		w.noteList(c, pal, st)
 	})
 }
 
@@ -673,44 +700,12 @@ func installedAgents() ([]agent.Agent, bool) {
 	return agentsFound.list, agentsFound.done
 }
 
-// groupControl chooses how the files group: not at all, by kind, or by
-// the agent's review, which it asks for when there is none.
-func (w *window) groupControl(c *ui.Context, pal *palette) {
-	t := c.Theme()
-	modes := []groupMode{groupNone, groupKind, groupAI}
-	current := slices.Index(modes, w.grouping())
-	st := w.analyses[w.source]
-	running := st != nil && st.running
-	choice := current
-	seg := ui.SegmentedBase(c, &choice, len(modes))
-	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.1)).Label("Group files").Children(func() {
-		for i, it := range []struct {
-			icon *ui.SVG
-			name string
-		}{{iconList, "No groups"}, {iconLayers, "Group by kind"}, {iconSparkle, "Group by an AI review"}} {
-			s := seg.Segment(i).Size(30, 24).Radius(6).Center().Label(it.name).Tooltip(it.name).TextColor(t.TextMuted)
-			if i == current {
-				s.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)
-			}
-			s.OnClick(func() { w.chooseGrouping(modes[i]) })
-			s.Children(func() {
-				if i == 2 && running {
-					// A review under way. A spinner is painted again, as
-					// the card's, where an animation of the icon would
-					// build the window again at every frame.
-					ui.Spinner(c).Size(14, 14)
-					return
-				}
-				ui.Icon(c, it.icon).FontSize(15)
-			})
-		}
-	})
-
-}
-
 // chooseGrouping groups the files as the user chose. Grouping by an AI
 // review there is not yet offers one: an agent runs only when asked.
 func (w *window) chooseGrouping(mode groupMode) {
+	if !aiReviewEnabled && mode == groupAI {
+		return
+	}
 	if mode == groupAI && w.analysisResult() == nil {
 		w.groupPref = groupAI
 		st := w.analysisFor(w.source)
@@ -726,6 +721,9 @@ func (w *window) chooseGrouping(mode groupMode) {
 
 // reviewWithAI asks the agent for a review, or shows the one there is.
 func (w *window) reviewWithAI() {
+	if !aiReviewEnabled {
+		return
+	}
 	st := w.analyses[w.source]
 	if st != nil && (st.result != nil || st.running) {
 		st.folded = false

@@ -96,7 +96,7 @@ func (w *window) pullsView(c *ui.Context) {
 			row.Background(t.Accent).TextColor(t.AccentText)
 			muted, ref = t.AccentText.Alpha(0.75), t.AccentText
 		case i == current:
-			row.Background(ui.RGBA(127, 127, 127, 0.2))
+			row.Background(t.Accent.Alpha(0.10))
 		case row.Hovered():
 			row.Background(ui.RGBA(127, 127, 127, 0.08))
 		}
@@ -127,7 +127,7 @@ func (w *window) pullsView(c *ui.Context) {
 						ui.Icon(c, iconXCircle).FontSize(12).TextColor(pickColor(selected, t.AccentText, t.Danger)).Tooltip("Changes requested").Shrink(0)
 					}
 					if p.Checks != "" {
-						color := map[string]ui.Color{"success": pal.addBar, "failure": t.Danger, "pending": ui.Hex("#d4a72c")}[p.Checks]
+						color := map[string]ui.Color{"success": pal.addBar, "failure": t.Danger, "pending": pal.modified}[p.Checks]
 						ui.Box(c).Size(7, 7).Radius(4).Background(color).Tooltip("Checks: " + p.Checks).Shrink(0)
 					}
 				})
@@ -167,11 +167,11 @@ func stateBadge(c *ui.Context, pal *palette, m *github.PullRequest) ui.Element {
 	case "Draft":
 		icon, color = iconPullDraft, t.TextMuted
 	case "Merged":
-		icon, color = iconMerge, ui.Hex("#8250df")
+		icon, color = iconMerge, pal.merged
 	case "Closed":
 		icon, color = iconPullClosed, t.Danger
 	}
-	return ui.Row(c).Gap(5).Padding(4, 10, 4, 8).Radius(14).Background(color).TextColor(ui.RGB(255, 255, 255)).Shrink(0).Children(func() {
+	return ui.Row(c).Gap(5).Padding(4, 10, 4, 8).Radius(14).Background(color).TextColor(t.InverseText).Shrink(0).Children(func() {
 		ui.Icon(c, icon).FontSize(13)
 		ui.Text(c, status).FontSize(12).FontWeight(700)
 	})
@@ -189,121 +189,106 @@ func plainBody(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// pullHeader shows the pull request reviewed: its state, title, branches,
-// description and reviews.
+// pullHeader is the pull request's source strip: its state, number, title,
+// author and branches, with the description and reviews folded under it
+// until asked for.
 func (w *window) pullHeader(c *ui.Context, pal *palette) ui.Element {
 	t := c.Theme()
 	p := w.pr
 	m := p.meta
-	return ui.Column(c).Padding(14, 16).Gap(10).Radius(cardRadius).Background(pal.headerBg).Border(1, pal.cardBorder).Children(func() {
-		ui.Row(c).Gap(10).AlignItems(ui.Start).Children(func() {
+	return ui.Column(c).Children(func() {
+		strip := ui.Row(c).Height(36).Shrink(0).Padding(0, 12).Gap(8).Background(pal.headerBg).
+			BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder)
+		strip.Children(func() {
 			stateBadge(c, pal, m)
-			ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
-				ui.RichText(c,
-					ui.Span{Text: m.Title, Weight: 700},
-					ui.Span{Text: fmt.Sprintf("  #%d", m.Number), Color: t.TextMuted},
-				).FontSize(15).Selectable()
-				ui.Row(c).Gap(6).Children(func() {
-					avatar(c, m.User, 18)
-					verb := fmt.Sprintf(" wants to merge %s into ", plural(m.Commits, "commit"))
-					if m.Status() == "Merged" {
-						verb = fmt.Sprintf(" merged %s into ", plural(m.Commits, "commit"))
-					}
-					ui.RichText(c,
-						ui.Span{Text: m.User.Login, Weight: 600},
-						ui.Span{Text: verb, Color: t.TextMuted},
-						ui.Span{Text: m.Base.Ref, Font: w.codeFont(), Color: pal.ref},
-						ui.Span{Text: " from ", Color: t.TextMuted},
-						ui.Span{Text: m.Head.Label, Font: w.codeFont(), Color: pal.ref},
-						ui.Span{Text: ago(w.now, m.CreatedAt), Color: t.TextMuted},
-					).FontSize(12).Shrink(1).MinWidth(0).Tooltip("Opened " + m.CreatedAt.Local().Format("Mon Jan 2 15:04 2006"))
-				})
-			})
-			if iconButton(c, iconCopy, "Copy link").Clicked() {
+			ui.Textf(c, "#%d", m.Number).Font(w.codeFont()).FontSize(11).TextColor(pal.ref).Shrink(0)
+			ui.Text(c, m.Title).FontSize(12.5).FontWeight(600).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+			ui.Text(c, m.User.Login).FontSize(10.5).TextColor(t.TextMuted).Shrink(0)
+			ui.Text(c, m.Base.Ref+" ← "+m.Head.Ref).Font(w.codeFont()).FontSize(10.5).TextColor(t.TextMuted).Shrink(0)
+			ui.Textf(c, "+%s −%s", thousands(m.Additions), thousands(m.Deletions)).
+				Font(w.codeFont()).FontSize(10.5).FontWeight(600).Shrink(0)
+			if iconButton(c, iconCopy, "Copy link").Size(24, 24).Clicked() {
 				c.WriteClipboard(m.HTMLURL)
 				c.Toast("Copied the link of #" + itoa(m.Number))
 			}
-			if iconButton(c, iconOpen, "Open on GitHub").Clicked() {
+			if iconButton(c, iconOpen, "Open on GitHub").Size(24, 24).Clicked() {
 				c.OpenURL(m.HTMLURL)
 			}
-		})
-		ui.Row(c).Gap(10).Children(func() {
-			ui.RichText(c,
-				ui.Span{Text: "+" + thousands(m.Additions), Color: pal.addText},
-				ui.Span{Text: " −" + thousands(m.Deletions), Color: pal.delText},
-				ui.Span{Text: " · " + plural(m.ChangedFiles, "file"), Color: t.TextMuted},
-			).Font(w.codeFont()).FontSize(12).FontWeight(600)
-			if r := p.reviews; r != nil && len(r.Threads) > 0 {
-				open := 0
-				for _, th := range r.Threads {
-					if !th.Resolved && !th.Outdated {
-						open++
-					}
-				}
-				ui.Textf(c, "%s · %d unresolved", plural(len(r.Threads), "thread"), open).FontSize(12).TextColor(t.TextMuted)
+			if p.readOnly != "" || p.reviewsErr != nil || p.writeErr != "" {
+				ui.Icon(c, iconAlert).FontSize(13).TextColor(t.Danger).Shrink(0)
 			}
-			if p.reviewsLoading {
-				ui.Spinner(c).Size(12, 12)
+			w.reviewButton(c, pal)
+			tip := "Show the pull request"
+			icon := iconChevronRight
+			if p.descOpen {
+				tip, icon = "Hide the pull request", iconChevronDown
+			}
+			if iconButton(c, icon, tip).Size(24, 24).Clicked() {
+				p.descOpen = !p.descOpen
 			}
 		})
-		if body := plainBody(m.Body); body != "" {
-			ui.Column(c).Gap(4).Children(func() {
-				text := ui.Text(c, body).FontSize(13).Selectable().TextColor(t.Text.Alpha(0.88))
-				long := strings.Count(body, "\n") > 6 || len(body) > 600
-				if long && !p.descOpen {
-					text.MaxLines(6)
+		if !p.descOpen {
+			return
+		}
+		detail := ui.Column(c).Padding(8, 16, 10).Gap(8).Background(pal.headerBg).
+			BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder)
+		detail.Children(func() {
+			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+				if r := p.reviews; r != nil && len(r.Threads) > 0 {
+					open := 0
+					for _, th := range r.Threads {
+						if !th.Resolved && !th.Outdated {
+							open++
+						}
+					}
+					ui.Textf(c, "%s · %d unresolved", plural(len(r.Threads), "thread"), open).
+						FontSize(10.5).TextColor(t.TextMuted)
 				}
-				if long {
-					label := "Show more"
-					if p.descOpen {
-						label = "Show less"
-					}
-					b := ui.ButtonBase(c).AlignSelf(ui.Start).Children(func() {
-						ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(t.Accent)
-					})
-					if b.Clicked() {
-						p.descOpen = !p.descOpen
-					}
+				if p.reviewsLoading {
+					ui.Spinner(c).Size(12, 12)
 				}
 			})
-		}
-		if r := p.reviews; r != nil && len(r.Summaries) > 0 {
-			ui.Column(c).Gap(8).Padding(10, 0, 0).BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Children(func() {
-				for _, s := range r.Summaries {
-					w.reviewSummary(c, pal, s)
-				}
-			})
-		}
-		hint := func(icon *ui.SVG, text string, color ui.Color, dismiss func(), actions ...[2]any) {
-			ui.Row(c).Gap(8).Padding(6, 6, 6, 10).Radius(8).Background(color.Alpha(0.08)).Children(func() {
-				ui.Icon(c, icon).FontSize(14).TextColor(color)
-				ui.Text(c, text).FontSize(12).TextColor(color.Mix(t.Text, 0.4)).Grow(1).Shrink(1).MinWidth(0).Selectable()
-				for _, a := range actions {
-					label, fn := a[0].(string), a[1].(func())
-					b := ui.ButtonBase(c).AlignSelf(ui.Center).Padding(3, 9).Radius(6).Children(func() {
-						ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(color)
-					})
-					if b.Clicked() {
-						fn()
+			if body := plainBody(m.Body); body != "" {
+				ui.Text(c, body).FontSize(12.5).Selectable().TextColor(t.Text.Alpha(0.88)).MaxLines(14)
+			}
+			if r := p.reviews; r != nil && len(r.Summaries) > 0 {
+				ui.Column(c).Gap(6).Padding(8, 0, 0).BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Children(func() {
+					for _, s := range r.Summaries {
+						w.reviewSummary(c, pal, s)
 					}
-				}
-				if dismiss != nil && iconButton(c, iconClose, "Dismiss").Size(22, 22).Clicked() {
-					dismiss()
-				}
-			})
-		}
-		if p.writeErr != "" {
-			hint(iconAlert, p.writeErr, t.Danger, func() { p.writeErr = "" })
-		}
-		if p.reviewsErr != nil {
-			hint(iconAlert, "Could not read the review comments: "+errorText(p.reviewsErr), t.Danger, nil)
-		}
-		if p.readOnly != "" {
-			hint(iconAlert, p.readOnly, t.TextMuted, nil,
-				[2]any{"Sign in with gh", func() { signInWithGH() }},
-				[2]any{"Open Config File…", func() { openConfig() }},
-			)
-		}
+				})
+			}
+			hint := func(icon *ui.SVG, text string, color ui.Color, dismiss func(), actions ...[2]any) {
+				ui.Row(c).Gap(8).Padding(5, 6, 5, 10).Radius(6).Background(color.Alpha(0.08)).Children(func() {
+					ui.Icon(c, icon).FontSize(13).TextColor(color)
+					ui.Text(c, text).FontSize(11.5).TextColor(color.Mix(t.Text, 0.4)).Grow(1).Shrink(1).MinWidth(0).Selectable()
+					for _, a := range actions {
+						label, fn := a[0].(string), a[1].(func())
+						b := ui.ButtonBase(c).AlignSelf(ui.Center).Padding(2, 8).Radius(5).Children(func() {
+							ui.Text(c, label).FontSize(11).FontWeight(600).TextColor(color)
+						})
+						if b.Clicked() {
+							fn()
+						}
+					}
+					if dismiss != nil && iconButton(c, iconClose, "Dismiss").Size(20, 20).Clicked() {
+						dismiss()
+					}
+				})
+			}
+			if p.writeErr != "" {
+				hint(iconAlert, p.writeErr, t.Danger, func() { p.writeErr = "" })
+			}
+			if p.reviewsErr != nil {
+				hint(iconAlert, "Could not read the review comments: "+errorText(p.reviewsErr), t.Danger, nil)
+			}
+			if p.readOnly != "" {
+				hint(iconAlert, p.readOnly, t.TextMuted, nil,
+					[2]any{"Sign in with gh", func() { signInWithGH() }},
+					[2]any{"Open Config File…", func() { openConfig() }},
+				)
+			}
+		})
 	})
 }
 
@@ -374,16 +359,18 @@ func (w *window) threadRow(c *ui.Context, pal *palette, f *fileState, th *github
 		return
 	}
 	folded := (th.Resolved || th.Outdated) && !p.opened[th.RootID]
-	w.card(c, pal).Padding(8, 16).Children(func() {
-		box := ui.Column(c).Grow(1).MinWidth(0).Radius(12).Border(1, pal.cardBorder).Background(pal.headerBg).Clip()
-		if th.Pending {
-			box.Border(1, pal.ref.Alpha(0.45))
-		}
+	edge := t.Accent.Alpha(0.45)
+	switch {
+	case th.Pending:
+		edge = pal.ref.Alpha(0.55)
+	case th.Resolved || th.Outdated:
+		edge = pal.cardBorder
+	}
+	ui.Row(c).Background(pal.codeBg).Padding(6, 14, 7, 16).Gap(8).AlignItems(ui.Start).
+		BorderWidth(0, 0, 0, 2).BorderColor(edge).Children(func() {
+		box := ui.Column(c).Grow(1).MinWidth(0)
 		box.Children(func() {
-			head := ui.Row(c).Height(34).Padding(0, 4, 0, 10).Gap(8)
-			if !folded {
-				head.BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder)
-			}
+			head := ui.Row(c).Height(24).Gap(6)
 			head.Children(func() {
 				ui.Icon(c, iconComment).FontSize(13).TextColor(t.TextMuted)
 				ui.Text(c, threadLabel(th)).FontSize(11).FontWeight(600).TextColor(t.TextMuted).Shrink(0)
@@ -458,12 +445,12 @@ func (w *window) threadComment(c *ui.Context, pal *palette, th *github.Thread, c
 	t := c.Theme()
 	p := w.pr
 	own := p.viewer != "" && cm.Author.Login == p.viewer && p.canWrite()
-	ui.Row(c.Key(cm.ID)).Gap(10).Padding(10, 12).AlignItems(ui.Start).Children(func() {
-		avatar(c, cm.Author, 24)
+	ui.Row(c.Key(cm.ID)).Gap(7).Padding(4, 0).AlignItems(ui.Start).Children(func() {
+		avatar(c, cm.Author, 20)
 		ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
 			ui.Row(c).Gap(6).Children(func() {
-				ui.Text(c, cm.Author.Login).FontSize(12).Bold()
-				ui.Text(c, relativeTime(w.now, cm.CreatedAt)).FontSize(11).TextColor(t.TextMuted).
+				ui.Text(c, cm.Author.Login).FontSize(11.5).Bold()
+				ui.Text(c, relativeTime(w.now, cm.CreatedAt)).FontSize(10.5).TextColor(t.TextMuted).
 					Tooltip(cm.CreatedAt.Local().Format("Mon Jan 2 15:04 2006"))
 				ui.Spacer(c)
 				if own && p.editing != cm.ID {
@@ -513,7 +500,7 @@ func (w *window) threadComment(c *ui.Context, pal *palette, th *github.Thread, c
 				})
 				return
 			}
-			ui.Text(c, plainBody(cm.Body)).FontSize(13).Selectable()
+			ui.Text(c, plainBody(cm.Body)).FontSize(12.5).Selectable()
 		})
 	})
 }
@@ -527,8 +514,8 @@ func (w *window) replyBox(c *ui.Context, pal *palette, th *github.Thread) {
 		text = new(string)
 		p.replies[th.RootID] = text
 	}
-	ui.Column(c).Gap(8).Padding(8, 12, 10).BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Children(func() {
-		area := ui.TextAreaBase(c, text).Placeholder("Reply…").MinHeight(34).Padding(7, 10).FontSize(13).Radius(8).
+	ui.Column(c).Gap(5).Padding(4, 0, 4).Children(func() {
+		area := ui.TextAreaBase(c, text).Placeholder("Reply…").MinHeight(30).Padding(6, 8).FontSize(12.5).Radius(6).
 			Background(pal.codeBg).Border(1, pal.cardBorder).Label("Reply to the thread")
 		focused := area.Focused()
 		if focused {

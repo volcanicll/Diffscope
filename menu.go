@@ -71,9 +71,16 @@ func buildMenu() *mygo.Menu {
 			{Label: "Open Pull Request…", Click: inWindow(func(w *window) { w.openDialog(dialogPull) })},
 			mygo.Separator(),
 			{Label: "Commit…", Accelerator: "CmdOrCtrl+Enter", Click: inWindow(func(w *window) {
-				if w.source.kind == sourceWorkingTree && !w.commitOpen && len(w.files) > 0 {
-					w.toggleCommit()
+				if w.source.kind != sourceWorkingTree || len(w.files) == 0 {
+					return
 				}
+				if w.commitOpen {
+					if w.commitCan() {
+						w.makeCommit()
+					}
+					return
+				}
+				w.toggleCommit()
 			})},
 			mygo.Separator(),
 			{Label: "Open File in Editor", Accelerator: "CmdOrCtrl+Shift+O", Click: inWindow(func(w *window) { w.openCurrent() })},
@@ -109,19 +116,21 @@ func buildMenu() *mygo.Menu {
 				{ID: "term-bottom", Label: "Bottom", Type: mygo.MenuItemRadio, Checked: s.TerminalPosition == "bottom", Click: setTerminalPos("bottom")},
 				{ID: "term-right", Label: "Right", Type: mygo.MenuItemRadio, Checked: s.TerminalPosition == "right", Click: setTerminalPos("right")},
 			}},
-			{Label: "Toggle Sidebar", Accelerator: "CmdOrCtrl+Shift+B", Click: inWindow(func(w *window) { w.toggleSidebar() })},
-			{Label: "Files", Accelerator: "CmdOrCtrl+1", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = 0, true })},
-			{Label: "History", Accelerator: "CmdOrCtrl+2", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = 1, true })},
+			{Label: "Toggle Navigator", Accelerator: "CmdOrCtrl+Shift+B", Click: inWindow(func(w *window) { w.toggleSidebar() })},
+			{Label: "Changes", Accelerator: "CmdOrCtrl+1", Click: inWindow(func(w *window) { w.showMode(0) })},
+			{Label: "History", Accelerator: "CmdOrCtrl+2", Click: inWindow(func(w *window) { w.showMode(1) })},
 			{Label: "Pull Requests", Accelerator: "CmdOrCtrl+3", Click: inWindow(func(w *window) { w.showPulls() })},
-			{Label: "Repository", Accelerator: "CmdOrCtrl+4", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = w.repoTabIndex(), true })},
+			{Label: "Repository", Accelerator: "CmdOrCtrl+4", Click: inWindow(func(w *window) { w.showMode(w.repoTabIndex()) })},
+			{Label: "Scope", Submenu: []*mygo.MenuItem{
+				{Label: "All Changes", Accelerator: "Ctrl+1", Click: inWindow(func(w *window) { w.setStage(stageAll) })},
+				{Label: "Staged Changes", Accelerator: "Ctrl+2", Click: inWindow(func(w *window) { w.setStage(stageStaged) })},
+				{Label: "Unstaged Changes", Accelerator: "Ctrl+3", Click: inWindow(func(w *window) { w.setStage(stageUnstaged) })},
+			}},
 			mygo.Separator(),
-			{Label: "Review with AI", Accelerator: "CmdOrCtrl+Shift+I", Click: inWindow(func(w *window) { w.reviewWithAI() })},
 			{Label: "Group Files", Submenu: []*mygo.MenuItem{
 				{Label: "Not at All", Click: inWindow(func(w *window) { w.chooseGrouping(groupNone) })},
 				{Label: "By Kind", Click: inWindow(func(w *window) { w.chooseGrouping(groupKind) })},
-				{Label: "By AI Review", Click: inWindow(func(w *window) { w.chooseGrouping(groupAI) })},
 			}},
-			{Label: "AI Agent", Submenu: agentMenuItems(s)},
 			mygo.Separator(),
 			{Label: "Diff", Submenu: []*mygo.MenuItem{
 				{ID: "split", Label: "Split", Type: mygo.MenuItemRadio, Checked: s.DiffStyle == "split", Click: func(*mygo.MenuItem, *mygo.Window) {

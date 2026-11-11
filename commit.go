@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
@@ -54,8 +55,24 @@ func (w *window) commitFiles() []*fileState {
 	return out
 }
 
-// commitView composes and makes a commit of the files chosen.
-func (w *window) commitView(c *ui.Context) {
+// commitCan reports whether the dock can make a commit: a subject, at
+// least one file, and no commit under way.
+func (w *window) commitCan() bool {
+	if w.commitBusy || w.commitDone != "" || strings.TrimSpace(w.subject) == "" {
+		return false
+	}
+	for _, f := range w.commitFiles() {
+		if w.commitPaths[f.Path] {
+			return true
+		}
+	}
+	return false
+}
+
+// commitDock composes a commit at the bottom of the navigator, while the
+// document stays where it is. It is the one place a commit happens; it
+// never replaces the diff.
+func (w *window) commitDock(c *ui.Context) {
 	t := c.Theme()
 	pal := paletteFor(t)
 	w.reconcileCommitPaths()
@@ -68,131 +85,111 @@ func (w *window) commitView(c *ui.Context) {
 		adds += f.Additions
 		dels += f.Deletions
 	}
-	subject := strings.TrimSpace(w.subject)
-	can := !w.commitBusy && w.commitDone == "" && chosen > 0 && subject != ""
-	submit := func() {
-		if can {
-			w.makeCommit()
-		}
-	}
-	ui.Column(c).Grow(1).MinHeight(0).Background(pal.appBg).Children(func() {
-		ui.Row(c).Padding(12, 20).Gap(12).BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Children(func() {
-			ui.Text(c, "Commit").FontSize(22).Bold()
-			if w.branch != "" {
-				ui.Row(c).Gap(5).Padding(3, 8).Radius(12).Background(pal.ref.Alpha(0.13)).TextColor(pal.ref).Children(func() {
-					ui.Icon(c, iconBranch).FontSize(12)
-					ui.Text(c, w.branch).Font(w.codeFont()).FontSize(11).FontWeight(600)
-				})
-			}
+	can := w.commitCan()
+	ui.Column(c).Key("commit-dock").Height(252).Shrink(0).Background(pal.appBg).
+		BorderWidth(1, 0, 1, 0).BorderColor(pal.cardBorder).Children(func() {
+		ui.Row(c).Height(28).Padding(0, 10).Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "Commit").FontSize(12).FontWeight(600)
 			ui.RichText(c,
-				ui.Span{Text: plural(len(files), "file") + " · ", Color: t.TextMuted},
-				ui.Span{Text: "+" + thousands(adds), Color: pal.addText, Weight: 700},
-				ui.Span{Text: " −" + thousands(dels), Color: pal.delText, Weight: 700},
-			).FontSize(12).FontWeight(600)
+				ui.Span{Text: "+" + thousands(adds), Color: pal.addText},
+				ui.Span{Text: " -" + thousands(dels), Color: pal.delText},
+			).Font(w.codeFont()).FontSize(10.5)
+			ui.Spacer(c)
+			if iconButton(c, iconClose, "Close commit").Size(22, 22).Clicked() {
+				w.toggleCommit()
+			}
 		})
 		ui.Scroll(c).Grow(1).Children(func() {
-			ui.Column(c).MaxWidth(760).FillWidth().Margin(0, ui.Auto).Padding(24, 24, 32).Gap(10).Children(func() {
-				if w.commitDone != "" {
-					ui.Row(c).Gap(10).Padding(12, 14).Radius(12).Background(pal.viewed.Alpha(0.1)).Border(1, pal.viewed.Alpha(0.25)).Children(func() {
-						ui.Icon(c, iconCheckCircle).FontSize(20).TextColor(pal.viewed)
-						ui.Column(c).Gap(2).Children(func() {
-							ui.Text(c, "Committed "+plural(w.committedFiles, "file")).Bold()
-							ui.Textf(c, "%s · onto %s", w.commitDone, w.branch).Font(w.codeFont()).FontSize(12).TextColor(t.TextMuted)
-						})
-					})
-				}
-				subj := ui.TextInputBase(c, &w.subject).Placeholder("Summarize the change in one line…").Label("Subject").
-					Font(w.codeFont()).FontSize(17).FontWeight(600).Padding(14, 16).Radius(14).Background(pal.codeBg).Border(1, pal.cardBorder)
+			ui.Column(c).Padding(0, 10, 8).Gap(6).Children(func() {
+				subj := ui.TextInputBase(c, &w.subject).Placeholder("Summary").Label("Subject").FontSize(13).
+					Padding(6, 8).Radius(6).Background(pal.codeBg).Border(1, pal.cardBorder)
 				if w.commitFocus {
 					subj.Focus()
 					w.commitFocus = false
 				}
 				if subj.Focused() {
-					subj.Border(1, t.Accent.Alpha(0.6)).Shadow(0, 0, 0, 3, t.Accent.Alpha(0.2))
+					subj.Border(1, t.Accent.Alpha(0.6))
+					w.typing = true
 				}
-				if subj.Submitted() {
-					submit()
+				if subj.Submitted() && w.commitCan() {
+					w.makeCommit()
 				}
-				n := utf8.RuneCountInString(w.subject)
-				counter := ui.Textf(c, "%d/50", n).Font(w.codeFont()).FontSize(11).FontWeight(700).AlignSelf(ui.End).TextColor(t.TextMuted)
-				if n > 50 {
-					counter.TextColor(pal.ref)
-				}
-				ui.Text(c, "Summary").FontSize(13).Bold().Margin(6, 0, 0)
-				body := ui.TextAreaBase(c, &w.body).Placeholder("Describe the change in a paragraph or two…").Label("Summary").
-					FontSize(13).MinHeight(120).Padding(12, 14).Radius(14).Background(pal.codeBg).Border(1, pal.cardBorder)
-				if body.Focused() {
-					body.Border(1, t.Accent.Alpha(0.6)).Shadow(0, 0, 0, 3, t.Accent.Alpha(0.2))
-				}
-				ui.Row(c).Margin(14, 0, 0).Children(func() {
-					ui.Text(c, "Files in this commit").FontSize(13).Bold()
-					ui.Spacer(c)
-					ui.Textf(c, "%d of %d selected", chosen, len(files)).Font(w.codeFont()).FontSize(11).TextColor(t.TextMuted)
-				})
-				ui.Column(c).Radius(14).Background(pal.codeBg).Border(1, pal.cardBorder).Padding(6).Gap(2).Children(func() {
-					all := chosen == len(files) && len(files) > 0
-					group := ui.ButtonBase(c).Gap(10).Padding(6, 8).Radius(8).Label("Changed files")
-					if group.Hovered() {
-						group.Background(pal.hover)
+				if n := utf8.RuneCountInString(w.subject); n > 40 {
+					counter := ui.Textf(c, "%d/50", n).Font(w.codeFont()).FontSize(9.5).AlignSelf(ui.End).TextColor(t.TextMuted)
+					if n > 50 {
+						counter.TextColor(pal.ref)
 					}
-					if group.Clicked() {
+				}
+				body := ui.TextAreaBase(c, &w.body).Placeholder("Description (optional)").Label("Description").
+					FontSize(12.5).MinHeight(56).Padding(6, 8).Radius(6).Background(pal.codeBg).Border(1, pal.cardBorder)
+				if body.Focused() {
+					body.Border(1, t.Accent.Alpha(0.6))
+					w.typing = true
+				}
+				if body.Shortcut(ui.Cmd, ui.KeyEnter) && w.commitCan() {
+					w.makeCommit()
+				}
+				ui.Row(c).Height(22).Gap(4).AlignItems(ui.Center).Children(func() {
+					chev := iconButton(c, iconChevronRight, "Show the files")
+					if w.commitListOpen {
+						chev = iconButton(c, iconChevronDown, "Hide the files")
+					}
+					if chev.Clicked() {
+						w.commitListOpen = !w.commitListOpen
+					}
+					ui.Textf(c, "%d of %d files", chosen, len(files)).FontSize(11).TextColor(t.TextMuted)
+					ui.Spacer(c)
+					label := "Select all"
+					if chosen == len(files) && len(files) > 0 {
+						label = "Clear all"
+					}
+					b := ui.ButtonBase(c).Children(func() {
+						ui.Text(c, label).FontSize(10.5).TextColor(t.Accent)
+					})
+					if b.Clicked() {
+						all := chosen == len(files) && len(files) > 0
 						for _, f := range files {
 							w.commitPaths[f.Path] = !all
 						}
 					}
-					group.Children(func() {
-						checkMark(c, pal, all, chosen > 0 && !all)
-						ui.Text(c, "Changed files").FontSize(13).FontWeight(600).Grow(1)
-						ui.Textf(c, "%d/%d", chosen, len(files)).Font(w.codeFont()).FontSize(11).TextColor(t.TextMuted)
-					})
-					for _, f := range files {
-						on := w.commitPaths[f.Path]
-						row := ui.ButtonBase(c.Key(f.Path)).Gap(10).Padding(5, 8, 5, 26).Radius(8).Label(f.Path)
-						if row.Hovered() {
-							row.Background(pal.hover)
-						}
-						if row.Clicked() {
-							w.commitPaths[f.Path] = !on
-						}
-						if !on {
-							row.Opacity(0.55)
-						}
-						row.Children(func() {
-							checkMark(c, pal, on, false)
-							fileIcon(c, f, 14)
-							ui.RichText(c,
-								ui.Span{Text: f.Dir(), Color: t.TextMuted},
-								ui.Span{Text: f.Name()},
-							).Font(w.codeFont()).FontSize(12).SingleLine().Grow(1).Shrink(1).MinWidth(0)
-							ui.Text(c, statusLetter(f)).Font(w.codeFont()).FontSize(11).FontWeight(700).TextColor(statusColor(f.Status, pal, t))
-							if countable(f) {
-								ui.RichText(c,
-									ui.Span{Text: "+" + thousands(f.Additions), Color: pal.addText},
-									ui.Span{Text: " −" + thousands(f.Deletions), Color: pal.delText},
-								).Font(w.codeFont()).FontSize(11).FontWeight(600).Shrink(0)
-							}
-						})
-					}
 				})
-				if w.commitOutput != "" {
-					ui.Column(c).Margin(10, 0, 0).Radius(12).Border(1, pal.cardBorder).Background(pal.codeBg).Clip().Children(func() {
-						ui.Row(c).Padding(6, 6, 6, 12).BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Children(func() {
-							ui.Text(c, "Commit output").FontSize(12).Bold().Grow(1)
-							if iconButton(c, iconClose, "Dismiss").Size(24, 24).Clicked() {
-								w.commitOutput = ""
+				if w.commitListOpen {
+					ui.Column(c).Gap(1).Children(func() {
+						for _, f := range files {
+							on := w.commitPaths[f.Path]
+							row := ui.ButtonBase(c.Key(f.Path)).Height(22).Padding(0, 4).Gap(5).Radius(4).Label(f.Path)
+							if row.Hovered() {
+								row.Background(pal.hover)
 							}
-						})
-						ui.Text(c, w.commitOutput).Font(w.codeFont()).FontSize(12).Padding(10, 12).Selectable()
+							if row.Clicked() {
+								w.commitPaths[f.Path] = !on
+							}
+							row.Children(func() {
+								checkMark(c, pal, on, false)
+								fileIcon(c, f, 12)
+								ui.Text(c, f.Path).Font(w.codeFont()).FontSize(11).SingleLine().Ellipsis("…").
+									Grow(1).Shrink(1).MinWidth(0).TextColor(t.Text)
+								ui.Text(c, statusLetter(f)).Font(w.codeFont()).FontSize(9.5).FontWeight(700).
+									TextColor(statusColor(f.Status, pal, t))
+							})
+						}
 					})
 				}
 			})
 		})
-		ui.Row(c).Padding(10, 20).Gap(12).BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Children(func() {
-			if w.commitErr != "" {
-				ui.Text(c, w.commitErr).FontSize(12).TextColor(t.Danger).Grow(1).Shrink(1).MaxLines(2)
-			} else {
-				ui.Text(c, "⌘↩ commits").FontSize(12).TextColor(t.TextMuted).Grow(1)
+		ui.Row(c).Height(36).Padding(0, 10).Gap(8).AlignItems(ui.Center).
+			BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Children(func() {
+			msg, color := "⌘↩ commits", t.TextMuted
+			switch {
+			case w.commitErr != "":
+				msg, color = w.commitErr, t.Danger
+			case w.commitDone != "":
+				msg, color = "Committed "+shortHash(w.commitDone), pal.viewed
+			case w.commitOutput != "":
+				msg, color = "Commit failed — see the output", pal.ref
 			}
+			ui.Text(c, msg).FontSize(10.5).TextColor(color).SingleLine().Grow(1).Shrink(1).MinWidth(0).
+				Tooltip(w.commitOutput)
 			label := "Commit"
 			switch {
 			case w.commitBusy:
@@ -200,20 +197,16 @@ func (w *window) commitView(c *ui.Context) {
 			case w.commitDone != "":
 				label = "Committed"
 			}
-			b := ui.PrimaryButton(c, "").Disabled(!can).Children(func() {
-				ui.Icon(c, iconCommit).FontSize(15)
-				ui.Text(c, label).SingleLine()
-				if chosen < len(files) && chosen > 0 {
-					ui.Text(c, plural(chosen, "file")).FontSize(11).Padding(1, 6).Radius(8).Background(ui.RGBA(255, 255, 255, 0.22))
-				}
+			b := ui.PrimaryButton(c, "").Height(24).Disabled(!can).Children(func() {
+				ui.Text(c, label).FontSize(11.5).FontWeight(600)
 			})
-			if b.Clicked() {
-				submit()
+			if b.Clicked() && can {
+				w.makeCommit()
 			}
 		})
 	})
-	if c.Shortcut(ui.Cmd, ui.KeyEnter) {
-		submit()
+	if c.Shortcut(ui.Cmd, ui.KeyEnter) && w.commitCan() {
+		w.makeCommit()
 	}
 }
 
@@ -240,6 +233,9 @@ func plural(n int, what string) string {
 
 // makeCommit commits the files chosen.
 func (w *window) makeCommit() {
+	if w.commitBusy {
+		return
+	}
 	var paths []string
 	count := 0
 	for _, f := range w.commitFiles() {
@@ -274,6 +270,18 @@ func (w *window) makeCommit() {
 			w.loadHistory()
 			if w.win != nil {
 				go w.checkChanges()
+				// The dock confirms the commit for a moment, then folds
+				// away; the document stays.
+				go func() {
+					time.Sleep(2 * time.Second)
+					w.win.Update(func() {
+						if w.commitDone != "" {
+							w.commitOpen = false
+							w.commitDone = ""
+							w.rowsDirty = true
+						}
+					})
+				}()
 			} else {
 				w.changed = true
 			}

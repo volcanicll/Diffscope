@@ -47,15 +47,15 @@ func (w *window) commands() []command {
 	if w.settings.TerminalPosition == "right" {
 		pos = "Right"
 	}
-	return []command{
+	commands := []command{
 		{title: "Focus File Filter", keys: "⌘P", run: w.focusFilter},
 		{title: "Find in Diffs", keys: "⌘F", run: func() { w.finding = true }},
 		{title: "Open Commit", hint: "Review a commit", run: func() { w.openDialog(dialogCommit) }},
 		{title: "Open Branch", hint: "Compare with a branch", run: func() { w.openDialog(dialogBranch) }},
 		{title: "Open Pull Request", hint: "Review a pull request on GitHub", run: func() { w.openDialog(dialogPull) }},
 		{title: "Open Folder", hint: "In this window, or a new one", keys: "⌘O", run: func() { openFolderFrom(w) }},
-		{title: "Show File Tree", run: func() { w.tab, w.sidebarShown = 0, true }},
-		{title: "Show History", run: func() { w.tab, w.sidebarShown = 1, true }},
+		{title: "Show File Tree", run: func() { w.showMode(0) }},
+		{title: "Show History", run: func() { w.showMode(1) }},
 		{title: "Show Pull Requests", keys: "⌘3", run: w.showPulls},
 		{title: "Review with AI", hint: w.agentHint(), keys: "⌘⇧I", run: w.reviewWithAI},
 		{title: "Stop the AI Review", run: w.stopAnalysis},
@@ -106,6 +106,23 @@ func (w *window) commands() []command {
 		{title: "Refresh Changes", keys: "⌘R", run: w.refresh},
 		{title: "Keyboard Shortcuts", keys: "⇧?", run: func() { w.help = true }},
 	}
+	if !aiReviewEnabled {
+		masked := map[string]bool{
+			"Review with AI":           true,
+			"Stop the AI Review":       true,
+			"Next AI Note":             true,
+			"Previous AI Note":         true,
+			"Group Files by AI Review": true,
+		}
+		kept := commands[:0]
+		for _, c := range commands {
+			if !masked[c.title] {
+				kept = append(kept, c)
+			}
+		}
+		commands = kept
+	}
+	return commands
 }
 
 func toggleLayout() {
@@ -382,12 +399,19 @@ func (w *window) shortcutsHelp(c *ui.Context) {
 		title string
 		keys  [][2]string
 	}{
-		{"Navigation", [][2]string{{"Command bar", "⌘K"}, {"Filter files", "⌘P"}, {"Next hunk", "J"}, {"Previous hunk", "K"},
-			{"Next AI note", "N"}, {"Previous AI note", "⇧N"},
-			{"Toggle sidebar", "⌘⇧B"}, {"Toggle word wrap", "⌥Z"}, {"Open file in editor", "⌘⇧O"}, {"Refresh changes", "⌘R"}}},
-		{"Search", [][2]string{{"Find in diffs", "⌘F"}, {"Next match", "↩"}, {"Previous match", "⇧↩"}, {"Close search", "Esc"}}},
-		{"Comments", [][2]string{{"Comment on a line", "Click"}, {"Comment on the hunk", "↩"}, {"Add comment", "⌘↩"}, {"Discard comment", "Esc"}}},
-		{"Pull requests", [][2]string{{"Pull requests", "⌘3"}, {"Review with AI", "⌘⇧I"}, {"Add to your review", "⌘↩"}, {"Reply", "⌘↩"}}},
+		{"Navigation", [][2]string{{"Changes / History / Pulls / Repository", "⌘1–4"},
+			{"All / Staged / Unstaged", "⌃1–3"}, {"Next / previous hunk", "J / K"},
+			{"Next / previous file", "⇧⌘] / ⇧⌘["}, {"Mark file viewed", "V"},
+			{"Toggle navigator", "⌘⇧B"},
+			{"Toggle terminal", "⌃`"}, {"Open file in editor", "⌘⇧O"}, {"Refresh changes", "⌘R"}}},
+		{"Search", [][2]string{{"Command bar", "⌘K"}, {"Filter files", "⌘P"}, {"Find in diffs", "⌘F"},
+			{"Next / previous match", "↩ / ⇧↩"}, {"View options", "⌘⇧V"}, {"Close search", "Esc"}}},
+		{"Comments", [][2]string{{"Select a line", "Click"}, {"Comment on line or hunk", "↩"},
+			{"Post / add comment", "⌘↩"}, {"Discard or clear", "Esc"}}},
+		{"Commit", [][2]string{{"Open the commit dock", "⌘↩"}, {"Commit", "⌘↩"},
+			{"Close the dock or a panel", "Esc"}, {"Toggle word wrap", "⌥Z"}}},
+		{"Pull requests", [][2]string{{"Pull requests", "⌘3"},
+			{"Add to your review", "⌘↩"}, {"Reply", "⌘↩"}}},
 		{"Code", [][2]string{{"Bigger text", "⌘+"}, {"Smaller text", "⌘-"}, {"Actual size", "⌘0"}}},
 	}
 	ui.Modal(c, &w.help, func() {
@@ -401,7 +425,7 @@ func (w *window) shortcutsHelp(c *ui.Context) {
 			ui.Grid(c).Columns(2).GapX(28).GapY(14).Children(func() {
 				for _, g := range groups {
 					ui.Column(c).Gap(4).Children(func() {
-						ui.Text(c, strings.ToUpper(g.title)).FontSize(11).FontWeight(600).LetterSpacing(0.6).TextColor(t.TextMuted)
+						ui.Text(c, g.title).FontSize(11.5).FontWeight(600).TextColor(t.TextMuted)
 						for _, k := range g.keys {
 							ui.Row(c).MinHeight(26).Children(func() {
 								ui.Text(c, k[0]).FontSize(13).Grow(1)

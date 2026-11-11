@@ -8,32 +8,42 @@ accent color, dark mode, menus and vibrancy.
 [Website](https://volcanicll.github.io/Diffscope/) ·
 [Download](https://github.com/volcanicll/Diffscope/releases)
 
-<img src="docs/screenshot.png" width="1128" alt="Diffscope reviewing the changes of a repository, in a split diff with syntax highlighting" />
+<img src="docs/screenshot.png" width="1128" alt="Diffscope reviewing a repository's changes: the mode rail, the navigator's file tree, and one continuous split diff with syntax highlighting" />
 
 ## Features
 
-- **Review local changes**: all, staged, or unstaged files against `HEAD`
-  (the toolbar's scope menu: All changes, Staged changes, Unstaged changes),
-  in one scrolling surface of file cards with sticky headers.
+- **One continuous diff**: all, staged or unstaged changes against `HEAD`,
+  chosen from the title bar's All / Staged / Unstaged control, in a single
+  scrolling document. Each file is a sticky bar over its lines, the
+  line-number gutter keeps one width for the whole document, and unchanged
+  gaps expand 100 lines at a time or all at once.
 - **Split and unified diffs** (View → Diff) with syntax highlighting
-  (the Licht and Dunkel palettes), word-level change highlighting, and
-  unchanged lines that expand 100 at a time or all at once. New and deleted
-  files show in one column.
+  (the Licht and Dunkel palettes) and word-level change highlighting. New
+  and deleted files show in one column.
+- **A stable frame**: the mode rail keeps Changes, History, Pull requests
+  and Repository in place, and the navigator beside it lists the files,
+  commits, pull requests or work-tree files of the mode. The title bar
+  holds the repository, branch and scope — or the commit, branch or pull
+  request being reviewed — so hiding the navigator loses no context.
 - **Viewed files**: marking a file viewed collapses it, and it opens again
   once it changes. Generated files (lockfiles, `*.min.js`, protobufs,
   snapshots, …) and dependency folders (`node_modules`, `vendor`, `dist`,
   …) start collapsed.
-- **Review comments**: click a line (or press <kbd>J</kbd>/<kbd>K</kbd> and
-  <kbd>Enter</kbd>) to comment on a hunk; copy every comment as Markdown,
+- **Review comments**: click a line to select it, then <kbd>Enter</kbd> or
+  the `+` that appears on hover to comment on it — or press
+  <kbd>J</kbd>/<kbd>K</kbd> and <kbd>Enter</kbd> to comment on a hunk. The
+  annotation gutter at the right of the code marks every line with a
+  discussion, without moving the code. Copy every comment as Markdown,
   with the diff around it, for an agent or a colleague (<kbd>⌘⇧M</kbd>).
-- **Commit** the files you choose, with a subject and a summary, from the
-  Commit button under the sidebar. Other staged work stays staged.
+- **Commit dock**: the files you choose, a subject and a description, at
+  the bottom of the navigator. The diff never leaves the screen as it
+  opens, and committing refreshes it. Other staged work stays staged.
 - **History**: browse commits, review any of them against its first parent,
   or compare the work tree with where it branched off a branch — and switch
-  the checked-out branch from the toolbar's branch chip.
-- **Repository browser** (<kbd>⌘4</kbd>): the files of the work tree, with
-  any file's contents in an overlay, an in-file find bar, and picture
-  previews (images and SVG).
+  the checked-out branch from the title bar's branch chip.
+- **Repository browser** (<kbd>⌘4</kbd>): the files of the work tree. A
+  file opens in place over the diff, with an in-file find bar and picture
+  previews (images and SVG); closing it returns to the same scroll.
 - **Terminal** (<kbd>⌃`</kbd>): a real shell in a pty, under the review or
   beside it (View → Terminal Position), with a tab per session
   (<kbd>⌃⇧`</kbd> opens another). Dragging the divider resizes the panel,
@@ -43,35 +53,27 @@ accent color, dark mode, menus and vibrancy.
 - **Pull requests**: list the open pull requests of the repository's GitHub remote
   (<kbd>⌘3</kbd>) and review any of them, open or not. Diffscope fetches its
   commits into your clone, so it reads as local changes do: highlighted,
-  expandable, with pictures. Its files group by kind (code, tests, docs,
+  expandable, with pictures. The pull request's state, number, title,
+  author, branches and stats stay in a strip above the diff, its
+  description one click away. Its files group by kind (code, tests, docs,
   config, dependencies, generated), each group with how much of it you
   viewed; review threads show under their lines, to reply to and resolve;
   comments go out alone or into your review, which you submit as a comment,
-  an approval or a request for changes. A banner says when new commits are
-  pushed.
-- **AI review**: a coding agent installed on your machine — Claude Code,
-  Codex, OpenCode or Pi — reviews the changes, a pull request's or your
-  own: it summarizes them, groups the files by intent, and notes the lines
-  that deserve attention. It runs read-only, with the agent's own sign-in,
-  and its review is kept until you ask for another. Choose the agent and
-  the model in the review's card, among those the agent lists; by default
-  OpenCode reviews with the model it starts with itself. The card lists the
-  notes, and the file tree marks the files with some: click one, or press
-  <kbd>N</kbd> and <kbd>⇧N</kbd>, to go from note to note.
+  an approval or a request for changes. A quiet banner says when new
+  commits are pushed.
 - **Find in diffs** (<kbd>⌘F</kbd>), a **file filter** (<kbd>⌘P</kbd>) and a
   **command bar** (<kbd>⌘K</kbd>).
 - Image previews of changed pictures; a file tree with change counts and
   status letters; a banner when the work tree changes; a welcome screen
   with the recent repositories when what opens is not a repository.
-- Sidebar navigation selects files, directories, commits and pull requests
-  on pointer press, showing the new selection as the sidebar takes focus.
+- Navigator rows select files, directories, commits and pull requests on
+  pointer press, showing the new selection as the navigator takes focus.
   Directory disclosure and button actions activate on release.
-- **Transitions** as the views switch: the sidebar slides open and closed,
-  the terminal panel slides in under or beside the review, and the sidebar
-  tabs, the commit sheet and a browsed file fade in and out. macOS's
-  Reduce Motion is respected.
-- **A file's right-click menu**, in the file tree, the repository tab and
-  on a file's card: copy its relative or absolute path, or rename and
+- **Transitions** as the views switch: the navigator slides open and
+  closed, the terminal panel slides in under or beside the review, and a
+  mode's list fades as it changes. macOS's Reduce Motion is respected.
+- **A file's right-click menu**, in the file tree, the Repository view and
+  on a file's bar: copy its relative or absolute path, or rename and
   delete it in the work tree, the delete asking first.
 - **File icons** of each kind of file, in its color, drawn as the file tree
   of [@pierre/trees](https://www.npmjs.com/package/@pierre/trees) does.
@@ -107,17 +109,18 @@ Recent** lists the ten opened lately. **File → Open Commit…**
 | <kbd>⌘K</kbd> | Command bar |
 | <kbd>⌘P</kbd> | Filter files |
 | <kbd>⌘F</kbd> | Find in diffs |
+| <kbd>⌘1</kbd> / <kbd>⌘2</kbd> / <kbd>⌘3</kbd> / <kbd>⌘4</kbd> | Changes / History / Pull requests / Repository |
+| <kbd>⌃1</kbd> / <kbd>⌃2</kbd> / <kbd>⌃3</kbd> | All / Staged / Unstaged changes |
 | <kbd>J</kbd> / <kbd>K</kbd>, <kbd>^↓</kbd> / <kbd>^↑</kbd> | Next / previous hunk |
-| <kbd>N</kbd> / <kbd>⇧N</kbd> | Next / previous AI note |
-| <kbd>Enter</kbd> | Comment on the hunk chosen |
-| <kbd>Esc</kbd> | Clear the selection, the file browser or the find |
-| <kbd>⌘↩</kbd> | Add the comment; commit, in the commit view |
+| <kbd>⇧⌘]</kbd> / <kbd>⇧⌘[</kbd> | Next / previous file |
+| <kbd>V</kbd> | Mark the current file viewed |
+| <kbd>Enter</kbd> | Comment on the selected line or hunk |
+| <kbd>Esc</kbd> | Close the commit dock, a sheet, the preview or the find; clear the selection |
+| <kbd>⌘↩</kbd> | Commit from the dock; add the comment, in its field |
 | <kbd>⌘⇧M</kbd> | Copy review comments as Markdown |
-| <kbd>⌘⇧B</kbd> | Toggle the sidebar |
+| <kbd>⌘⇧B</kbd> | Toggle the navigator |
 | <kbd>⌃`</kbd> / <kbd>⌃⇧`</kbd> | Toggle the terminal / open a terminal tab |
-| <kbd>⌘1</kbd> / <kbd>⌘2</kbd> / <kbd>⌘3</kbd> / <kbd>⌘4</kbd> | Files / History / Pull requests / Repository |
-| <kbd>⌘⇧I</kbd> | Review with AI |
-| <kbd>⌘⇧Enter</kbd> | Commit… |
+| <kbd>⌘⇧V</kbd> | View options |
 | <kbd>⌘O</kbd> | Open folder |
 | <kbd>⌘⇧C</kbd> | Open commit… |
 | <kbd>⌘⇧O</kbd> | Open the file in your editor |
@@ -142,10 +145,7 @@ windows as the file changes:
     "diffStyle": "split",          // or "unified"
     "editorCommand": "",           // e.g. "zed {file}:{line}"
     "githubToken": "",             // empty uses the GitHub CLI's (gh auth login)
-    "aiAgent": "",                 // claude, codex, opencode or pi; empty is the first installed
-    "aiModel": "",                 // e.g. "sonnet"; empty is the agent's default
     "reviewCommentsPrefix": "# Address these Review Comments",
-    "sidebarPosition": "left",     // or "right"
     "terminalPosition": "bottom",  // or "right"
     "showWhitespace": false,
     "theme": "system",             // or "light", "dark"
@@ -153,6 +153,9 @@ windows as the file changes:
   }
 }
 ```
+
+The navigator always sits beside the mode rail, on the left; an older
+`sidebarPosition` value is ignored.
 
 Files open in `$DIFFSCOPE_EDITOR` or `editorCommand` (`{file}`, `{line}` and
 `{repo}` are replaced), else VS Code, else the app the system opens them
@@ -164,7 +167,7 @@ login`), or set `githubToken`, `$DIFFSCOPE_GITHUB_TOKEN`, `$GH_TOKEN` or
 `$GITHUB_TOKEN`.
 
 The window remembers, per repository inside `~/.diffscope`, which files
-were marked viewed, the sidebar's width and whether it showed, and the
+were marked viewed, the navigator's width and whether it showed, and the
 terminal's size and whether it showed.
 
 ## Development
@@ -204,24 +207,26 @@ The code is in a few parts:
 - `internal/diff`: parsing patches, and word-level differences.
 - `internal/highlight`: syntax highlighting with Chroma.
 - `internal/github`: pull requests, through `gh` or a token.
-- `internal/agent`: the coding agents' review, with their models.
+- `internal/agent`: the coding agents' review, kept behind a disabled flag.
 - `internal/fileicon`: the file tree's icons.
-- `internal/vt`: the terminal emulator, adapted from `charmbracelet/x/vt`,
-  with the reflow that re-wraps the screen and scrollback when the panel's
-  width changes. `internal/shellenv` gives the shell the login environment
-  the app found; the session ends the shell's process group itself.
-- The `main` package: the window and its views (`view.go`, `sidebar.go`,
-  `diffview.go`, `browse.go`, `commit.go`, `palette.go`, `terminal.go`),
-  the rows of the diff surface (`rows.go`), the file kinds (`groups.go`),
-  AI analysis (`analysis.go`), comments, find, settings and menus.
+- `internal/vt`: the terminal emulator, adapted from
+  `charmbracelet/x/vt`, with the reflow that re-wraps the screen and
+  scrollback when the panel's width changes. `internal/shellenv` gives the
+  shell the login environment the app found; the session ends the shell's
+  process group itself.
+- The `main` package: the window and its views (`view.go`, `rail.go`,
+  `sidebar.go`, `diffview.go`, `browse.go`, `commit.go`, `palette.go`,
+  `terminal.go`), the rows of the diff surface (`rows.go`), the file kinds
+  (`groups.go`), comments, find, settings and menus.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how a review travels from a `git`
 command to the screen.
 
 ## Not (yet) implemented
 
-LLM walkthroughs, GitHub and GitLab pull request review beyond GitHub,
-Markdown previews, editing files in place, definition lookup, `a..b`
-ranges, and separate cards for the staged and unstaged parts of a file
-(Diffscope shows a file's changes against `HEAD` as one; the toolbar's
-scope menu switches between them).
+AI review (the code is kept behind a disabled flag, so this build shows no
+entry to it), LLM walkthroughs, GitHub and GitLab pull request review
+beyond GitHub, Markdown previews, editing files in place, definition
+lookup, `a..b` ranges, and separate cards for the staged and unstaged parts
+of a file (Diffscope shows a file's changes against `HEAD` as one; the
+title bar's All / Staged / Unstaged control switches between them).

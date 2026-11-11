@@ -175,21 +175,9 @@ func TestViewOptionsShortcut(t *testing.T) {
 	}
 }
 
-func TestScopeMenuSwitchesStage(t *testing.T) {
+func TestScopeSegmentSwitchesStage(t *testing.T) {
 	w, tt := newTestWindow(t, testRepo(t))
-	if err := tt.Click("All changes"); err != nil {
-		t.Fatal(err)
-	}
-	var staged string
-	for _, item := range tt.Menu() {
-		if strings.HasPrefix(item, "Staged changes") {
-			staged = item
-		}
-	}
-	if staged == "" {
-		t.Fatalf("menu: %q", tt.Menu())
-	}
-	if err := tt.ChooseMenuItem(staged); err != nil {
+	if err := tt.Click("Staged changes"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -197,7 +185,14 @@ func TestScopeMenuSwitchesStage(t *testing.T) {
 		t.Fatalf("stage mode %d", w.stageMode)
 	}
 	if !tt.HasText("Staged changes") {
-		t.Fatalf("the chip does not show the scope: %v", tt.Texts())
+		t.Fatalf("the segment does not show the scope: %v", tt.Texts())
+	}
+	if err := tt.Click("Unstaged changes"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if w.stageMode != stageUnstaged {
+		t.Fatalf("stage mode %d", w.stageMode)
 	}
 }
 
@@ -277,7 +272,7 @@ func TestReviewShortcutsFromSidebar(t *testing.T) {
 }
 
 func TestReviewListReturnsAfterEmptyView(t *testing.T) {
-	for _, name := range []string{"filter", "load error", "commit"} {
+	for _, name := range []string{"filter", "load error"} {
 		t.Run(name, func(t *testing.T) {
 			w, tt := newTestWindow(t, testRepo(t))
 			switch name {
@@ -287,18 +282,16 @@ func TestReviewListReturnsAfterEmptyView(t *testing.T) {
 				w.rowsDirty = true
 			case "load error":
 				w.loadErr = errors.New("unable to load changes")
-			case "commit":
-				w.commitOpen = true
 			}
 			// A request to focus the review waits until its list returns.
 			w.focusList = true
 			tt.Frame()
 			tt.Frame()
-			if _, ok := tt.Find("Changes"); ok || !w.focusList {
-				t.Fatal("the hidden review was built or took focus")
+			if !w.focusList {
+				t.Fatal("the hidden review took focus")
 			}
-			if _, ok := tt.Find("Changed files"); name == "filter" && ok {
-				t.Fatal("the empty file tree was built")
+			if name == "filter" && len(w.treeRoots) != 0 {
+				t.Fatal("the filtered file tree still has roots")
 			}
 			tt.Key(0, ui.KeyJ)
 			tt.Key(0, ui.KeyEnter)
@@ -306,7 +299,7 @@ func TestReviewListReturnsAfterEmptyView(t *testing.T) {
 				t.Fatal("review shortcuts ran while its list was hidden")
 			}
 
-			w.filter, w.loadErr, w.commitOpen = "", nil, false
+			w.filter, w.loadErr = "", nil
 			w.buildTree()
 			w.rowsDirty = true
 			tt.Frame()
@@ -319,6 +312,18 @@ func TestReviewListReturnsAfterEmptyView(t *testing.T) {
 				t.Fatalf("review shortcuts did not return: %d comments", len(w.comments))
 			}
 		})
+	}
+}
+
+func TestCommitDockKeepsReview(t *testing.T) {
+	w, tt := newTestWindow(t, testRepo(t))
+	w.toggleCommit()
+	tt.Frame()
+	if !w.commitOpen {
+		t.Fatal("the commit dock did not open")
+	}
+	if !tt.HasText("main.go") || !tt.HasText("package main") {
+		t.Fatal("the commit dock unmounted the review")
 	}
 }
 
@@ -354,10 +359,8 @@ func TestCommit(t *testing.T) {
 	tt.Type("Greet louder")
 	tt.Frame()
 	snapshot(t, tt, "commit")
-	// Leave new.go out.
-	if err := tt.Click("src/new.go"); err != nil {
-		t.Fatal(err)
-	}
+	// Leave new.go out of the commit.
+	w.commitPaths["src/new.go"] = false
 	tt.Key(ui.Cmd, ui.KeyEnter)
 	tt.Frame()
 	if w.commitDone == "" {

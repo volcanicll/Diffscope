@@ -232,8 +232,12 @@ func TestPullRequest(t *testing.T) {
 		t.Fatalf("files %v, groups %+v", paths, w.groups)
 	}
 	tt.Frame()
+	if err := tt.Click("Show the pull request"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
 	snapshot(t, tt, "pull")
-	for _, want := range []string{"Greet louder", "Makes the greeting shorter.", "Why the exclamation mark?", "To greet louder.", "cy requested changes", "Open", "bo:greet"} {
+	for _, want := range []string{"Greet louder", "Makes the greeting shorter.", "Why the exclamation mark?", "To greet louder.", "cy requested changes", "Open", "bo", "main ← greet"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q in %q", want, tt.Texts())
 		}
@@ -334,12 +338,19 @@ func TestPullRequestReadOnly(t *testing.T) {
 	if w.loadErr != nil || len(w.files) != 2 {
 		t.Fatalf("error %v, %d files", w.loadErr, len(w.files))
 	}
+	if err := tt.Click("Show the pull request"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
 	if w.pr.canWrite() || !tt.HasText(w.pr.readOnly) {
 		t.Errorf("read only %q: %q", w.pr.readOnly, tt.Texts())
 	}
 }
 
 func TestAIReview(t *testing.T) {
+	oldAI := aiReviewEnabled
+	aiReviewEnabled = true
+	t.Cleanup(func() { aiReviewEnabled = oldAI })
 	w, tt := newTestWindow(t, testRepo(t))
 	old := runAgent
 	t.Cleanup(func() { runAgent = old })
@@ -389,7 +400,11 @@ func TestAIReview(t *testing.T) {
 	if w.files[0].Path != "src/new.go" || w.files[1].Path != "main.go" || w.files[0].group != 0 || w.files[2].group != 1 {
 		t.Errorf("order %s, %s", w.files[0].Path, w.files[1].Path)
 	}
-	for _, want := range []string{"AI Review", "Greets louder and tidies the docs.", "Greeting", "A shorter greeting.", "Callers may match on Hello.", "1 to take care with"} {
+	if err := tt.Click("Show notes"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	for _, want := range []string{"Greets louder and tidies the docs.", "Greeting", "A shorter greeting.", "Callers may match on Hello.", "1 to take care with"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q in %q", want, tt.Texts())
 		}
@@ -450,6 +465,9 @@ func TestParsePullArgs(t *testing.T) {
 }
 
 func TestAIModelMenu(t *testing.T) {
+	oldAI := aiReviewEnabled
+	aiReviewEnabled = true
+	t.Cleanup(func() { aiReviewEnabled = oldAI })
 	w, tt := newTestWindow(t, testRepo(t))
 	// The models OpenCode lists, as if it had listed them.
 	modelsFound.Lock()
@@ -498,6 +516,9 @@ func TestAIModelMenu(t *testing.T) {
 }
 
 func TestAINotes(t *testing.T) {
+	oldAI := aiReviewEnabled
+	aiReviewEnabled = true
+	t.Cleanup(func() { aiReviewEnabled = oldAI })
 	w, tt := newTestWindow(t, testRepo(t))
 	old := runAgent
 	t.Cleanup(func() { runAgent = old })
@@ -519,7 +540,11 @@ func TestAINotes(t *testing.T) {
 	w.runAnalysis()
 	tt.Frame()
 	tt.Frame()
-	// The card lists the notes, each going to its line.
+	if err := tt.Click("Show notes"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	// The review lists the notes, each going to its line.
 	for _, want := range []string{"Go to the note on main.go:6", "Go to the note on old.txt"} {
 		if _, ok := tt.Find(want); !ok {
 			t.Fatalf("no %q in %q", want, tt.Texts())
@@ -562,6 +587,8 @@ func TestAINotes(t *testing.T) {
 	if !noteShown("old.txt") {
 		t.Errorf("previous: note %+v", w.noteSel)
 	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
 	if w.noteSel != nil {

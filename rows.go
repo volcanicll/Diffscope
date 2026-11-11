@@ -73,6 +73,7 @@ const (
 	rowNote                   // why the lines do not show
 	rowImage                  // a picture, before and after
 	rowGap                    // unchanged lines not shown
+	rowHunk                   // a hunk's header, when its gap shows all its lines
 	rowLine                   // a line, or a pair of lines side by side
 	rowComment                // a comment on the line above
 	rowEnd                    // the bottom of a file's card
@@ -277,9 +278,9 @@ func (w *window) buildRows() {
 		}
 		f.computeWords()
 		split := w.splitFile(f)
-		addGap := func(g gap) {
+		addGap := func(g gap) bool {
 			if g.count <= 0 {
-				return
+				return false
 			}
 			shown := f.expanded[g.index]
 			if !f.canExpand() {
@@ -301,9 +302,14 @@ func (w *window) buildRows() {
 			for k := g.count - shown.bottom; k < g.count; k++ {
 				rows = w.appendContext(rows, idx, f, int32(g.oldStart+k), int32(g.newStart+k))
 			}
+			return hidden > 0
 		}
 		for hi := range f.Hunks {
-			addGap(f.gapBefore(hi))
+			if !addGap(f.gapBefore(hi)) {
+				// No gap row to carry the header: the hunk gets a row of its
+				// own, so its coordinates always show.
+				rows = append(rows, row{kind: rowHunk, file: idx, gap: int32(hi)})
+			}
 			lines := f.Hunks[hi].Lines
 			h := int32(hi)
 			if !split {

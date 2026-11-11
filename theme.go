@@ -30,9 +30,10 @@ type palette struct {
 	hover      ui.Color // what is under the pointer
 	match      ui.Color // a match of the find bar
 	matchNow   ui.Color // the current match
-	selected   ui.Color // lines chosen with j and k
 	viewed     ui.Color
 	ref        ui.Color // commit hashes and generated files
+	modified   ui.Color // a modified file's status
+	merged     ui.Color // a merged pull request
 	muted      ui.Color
 	syntax     [highlight.NumClasses]ui.Color
 	term       termPalette // the terminal panel's colors
@@ -73,9 +74,10 @@ var (
 		hover:      ui.RGBA(127, 127, 127, 0.11),
 		match:      ui.RGBA(255, 216, 92, 0.65),
 		matchNow:   ui.RGBA(255, 176, 46, 0.96),
-		selected:   ui.RGBA(61, 135, 245, 0.13),
 		viewed:     ui.RGB(31, 122, 68),
 		ref:        ui.Hex("#c56e0e"),
+		modified:   ui.Hex("#a8690a"),
+		merged:     ui.Hex("#8250df"),
 		muted:      ui.RGBA(17, 17, 17, 0.48),
 		term: termPalette{
 			fg:         ui.Hex("#333333"),
@@ -115,9 +117,10 @@ var (
 		hover:      ui.RGBA(127, 127, 127, 0.16),
 		match:      ui.RGBA(255, 216, 92, 0.38),
 		matchNow:   ui.RGBA(255, 176, 46, 0.80),
-		selected:   ui.RGBA(90, 150, 255, 0.12),
 		viewed:     ui.RGB(111, 208, 148),
 		ref:        ui.Hex("#eb9a3d"),
+		modified:   ui.Hex("#d4a72c"),
+		merged:     ui.Hex("#a371f7"),
 		muted:      ui.RGBA(230, 230, 230, 0.48),
 		term: termPalette{
 			fg:         ui.Hex("#d6d6d6"),

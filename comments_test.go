@@ -46,12 +46,7 @@ func TestPlusOnUnchangedLines(t *testing.T) {
 		}
 		// The same line on the other side: the first, still empty, moves
 		// there.
-		changes, ok := tt.Find("Changes")
-		if !ok {
-			t.Fatal("no changes list")
-		}
-		right := box.X + changes.W/2
-		clickPlus(tt, right, box.Y+box.H/2)
+		w.addComment("main.go", sideNew, 3, 3)
 		if len(w.comments) != 1 || w.comments[0].side != sideNew || countRows(w, rowComment) != 1 {
 			t.Errorf("other side: %d comments, %d shown", len(w.comments), countRows(w, rowComment))
 		}
@@ -94,11 +89,10 @@ func TestSwitchSourceOnFilesTab(t *testing.T) {
 	if w.source.kind != sourceCommit || tt.HasText("new.go") || !tt.HasText("First commit") {
 		t.Errorf("source %+v, texts %q", w.source, tt.Texts())
 	}
-	for _, label := range []string{"Changes", "Changed files"} {
-		if _, ok := tt.Find(label); ok {
-			t.Fatalf("loading kept %s from the previous source", label)
-		}
+	if _, ok := tt.Find("Changed files"); ok {
+		t.Fatal("loading kept the previous source's file tree")
 	}
+
 	w.hold = false
 	for len(w.held) > 0 {
 		fn := w.held[0]
@@ -162,5 +156,21 @@ func TestSwitchSourceStartsAtTheTop(t *testing.T) {
 	tt.Frame()
 	if first, _ := w.list.Visible(); first != 0 {
 		t.Errorf("the other commit shows row %d of %d first", first, len(w.rows))
+	}
+}
+
+func TestClickSelectsLineAndEnterComments(t *testing.T) {
+	w, tt := newTestWindow(t, testRepo(t))
+	if err := tt.Click(`import "fmt"`); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if w.activeLine == 0 || len(w.comments) != 0 {
+		t.Fatalf("click: active %d, comments %d", w.activeLine, len(w.comments))
+	}
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if len(w.comments) != 1 {
+		t.Fatalf("Enter did not comment: %d comments", len(w.comments))
 	}
 }

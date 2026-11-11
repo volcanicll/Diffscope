@@ -116,8 +116,14 @@ type window struct {
 	now        time.Time
 	charW      float32
 	charKey    string
-	// The hunk chosen with j and k.
+	// gutterDigits is the widest line number in the document, so that the
+	// numbers stay in one column from file to file.
+	gutterDigits int
+	// The hunk chosen with j and k, and the line chosen with a click.
 	selFile, selHunk int
+	activePath       string
+	activeSide       side
+	activeLine       int
 	focusList        bool
 	focusedOnce      bool
 	focusHistory     bool
@@ -218,6 +224,8 @@ type window struct {
 	commitDone     string // the hash committed
 	committedFiles int
 	commitFocus    bool
+	commitListOpen bool
+	commitMsgOpen  bool
 
 	// The command bar.
 	paletteOpen  bool
@@ -332,8 +340,8 @@ func openWindowIn(dir string, src source, into *window) error {
 		Title:          windowTitle(repo.Root, src),
 		Width:          1280,
 		Height:         860,
-		MinWidth:       720,
-		MinHeight:      420,
+		MinWidth:       860,
+		MinHeight:      520,
 		StateKey:       "main",
 		TitleBarStyle:  mygo.TitleBarHiddenInset,
 		TitleBarHeight: titleBarHeight,
@@ -431,6 +439,7 @@ func newWindow(repo *git.Repo, src source) *window {
 		w.pr = w.pullFor(src)
 	}
 	w.termSplit, w.termWidth, w.termShown = state.termLayout()
+	w.sidebarWidth = min(max(w.sidebarWidth, sidebarMin), sidebarMax)
 	w.termActive, w.termDrag = -1, w.termWidth
 	w.loadAnalysis(src)
 	w.dragWidth = w.sidebarWidth
@@ -585,6 +594,7 @@ func (w *window) switchTo(src source) {
 	w.loadErr = nil
 	w.list = ui.ListState{Key: w.list.Key, Header: w.list.Header}
 	w.selFile, w.selHunk = -1, -1
+	w.activePath, w.activeLine = "", 0
 	w.finding, w.query = false, ""
 	w.hscroll = map[string]float32{}
 	w.current = 0

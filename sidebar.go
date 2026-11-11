@@ -30,9 +30,9 @@ type treeNode struct {
 // The sidebar's width: its default, its bounds, and the width below which
 // dragging hides it.
 const (
-	sidebarDefault  = 292
+	sidebarDefault  = 280
 	sidebarMin      = 220
-	sidebarMax      = 640
+	sidebarMax      = 420
 	sidebarCollapse = 80
 )
 
@@ -200,7 +200,7 @@ func statusColor(s diff.Status, pal *palette, t *ui.Theme) ui.Color {
 	case diff.Conflict:
 		return t.Danger
 	}
-	return ui.Hex("#d4a72c")
+	return pal.modified
 }
 
 func statusLetter(f *fileState) string {
@@ -247,24 +247,11 @@ func countable(f *fileState) bool {
 	return !f.Binary && !f.Directory && !f.TooLarge
 }
 
-// sidebarInsets is the room the window controls take in the sidebar's
-// title bar, which pads its left and its right with it: the traffic lights
-// on the left of a sidebar on the left, the window buttons on the right of
-// a sidebar on the right.
-func (w *window) sidebarInsets(c *ui.Context) (left, right float32) {
-	bar := c.TitleBar()
-	if w.settings.SidebarPosition == "right" {
-		return 10, max(bar.Right+6, 10)
-	}
-	return max(bar.Left+6, 10), 10
-}
-
 func (w *window) sidebar(c *ui.Context) {
 	t := c.Theme()
 	pal := paletteFor(t)
-	left, right := w.sidebarInsets(c)
-	// The sidebar slides in and out: its width follows the toggle, and the
-	// review beside it follows the width it takes. It keeps its element as
+	// The navigator slides in and out: its width follows the toggle, and the
+	// document beside it follows the width it takes. It keeps its element as
 	// it hides, so that showing it again starts from nothing.
 	col := ui.Column(c.Key("sidebar")).Shrink(0).Background(w.sidebarBg(t)).ClipX()
 	open := float32(0)
@@ -277,25 +264,16 @@ func (w *window) sidebar(c *ui.Context) {
 	if width <= 0 && !w.sidebarShown {
 		return
 	}
-	// The views keep their width as the sidebar slides, and are clipped to
+	// The views keep their width as the navigator slides, and are clipped to
 	// the width it shows: they do not lay out anew at every width on the
 	// way, which would break their lines.
 	col.Children(func() {
 		ui.Column(c.Key("sidebar-body")).Width(w.sidebarWidth).Grow(1).Shrink(0).Children(func() {
-			// The title bar, under the window controls: the toggle of the
-			// sidebar and its views. The toggle keeps to the left, clear of the
-			// window controls and of the views, which the spacer pushes right
-			// while there is room for them beside it.
-			ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(6).AlignItems(ui.Center).DragWindow().Children(func() {
-				w.sidebarToggle(c)
-				if w.tabControl(c) {
-					w.commitOpen = false
-				}
-			})
 			if w.tab > w.repoTabIndex() {
 				w.tab = 0
 			}
-			ui.Column(c).Padding(2, 10, 8).Children(func() {
+			w.navigatorHeader(c, pal)
+			ui.Column(c).Padding(4, 10, 8).Children(func() {
 				switch {
 				case w.tab == 0:
 					if searchInput(c, &w.filter, "Filter files", &w.filterFocus, &w.typing) {
@@ -327,8 +305,65 @@ func (w *window) sidebar(c *ui.Context) {
 			default:
 				sidebarTab(c, "pulls", func() { w.pullsView(c) })
 			}
+			if w.commitOpen && w.source.kind == sourceWorkingTree && w.tab == 0 {
+				w.commitDock(c)
+			}
 			w.sidebarFooter(c, pal)
 		})
+	})
+}
+
+// navigatorHeader names the navigator's mode and counts what it lists. The
+// scope lives in the title bar; grouping lives here, next to the list it
+// changes.
+func (w *window) navigatorHeader(c *ui.Context, pal *palette) {
+	t := c.Theme()
+	title, count := "Changes", ""
+	switch {
+	case w.tab == 0:
+		n := 0
+		for i := range w.files {
+			if w.fileVisible(i) {
+				n++
+			}
+		}
+		count = plural(n, "file")
+	case w.tab == 1:
+		title = "History"
+		count = plural(len(w.history), "commit")
+	case w.tab == w.repoTabIndex():
+		title = "Repository"
+		if w.repoLoaded {
+			count = plural(len(w.repoFiles), "file")
+		}
+	default:
+		title = "Pulls"
+		if w.pullsLoaded {
+			count = fmt.Sprintf("%d open", len(w.pulls))
+		}
+	}
+	ui.Row(c).Height(30).Shrink(0).Padding(0, 10, 0, 10).Gap(6).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, title).FontSize(12).FontWeight(600).SingleLine().Shrink(0)
+		if count != "" {
+			ui.Text(c, count).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+		}
+		ui.Spacer(c)
+		if w.tab == 0 {
+			b := iconButton(c, iconLayers, "Group files")
+			b.Menu(func(m *ui.Menu) {
+				modes := []groupMode{groupNone, groupKind}
+				labels := []string{"Not at all", "By kind"}
+				if aiReviewEnabled {
+					modes = append(modes, groupAI)
+					labels = append(labels, "By AI review")
+				}
+				for i, mode := range modes {
+					if m.Item(labels[i]).Checked(w.grouping() == mode).Chosen() {
+						w.chooseGrouping(mode)
+					}
+				}
+			})
+		}
 	})
 }
 
@@ -357,63 +392,11 @@ func (w *window) sidebarBg(t *ui.Theme) ui.Color {
 // their controls on the traffic lights of a window with an inset title bar.
 const titleBarHeight = 38
 
-// tabControl switches the sidebar between the files, the history and the
-// pull requests, and reports a switch. The Repository is not a tab: the
-// More menu and ⌘4 open it, and no segment shows then.
-func (w *window) tabControl(c *ui.Context) bool {
-	t := c.Theme()
-	pal := paletteFor(t)
-	type item struct {
-		icon  *ui.SVG
-		name  string // the accessibility name and the tooltip
-		label string // the text, when the sidebar is wide enough
-	}
-	items := []item{
-		{iconTree, "Files (⌘1)", "Files"},
-		{iconHistory, "History (⌘2)", "History"},
-	}
-	if w.gh.ok() {
-		items = append(items, item{iconPull, "Pull Requests (⌘3)", "Pulls"})
-	}
-	// Below this width the labels do not fit beside the toggle.
-	showText := w.sidebarWidth >= 288
-	changed := false
-	track := ui.Row(c).Height(28).Grow(1).MinWidth(0).Padding(2).Gap(2).Radius(8).
-		Background(ui.RGBA(127, 127, 127, 0.12)).Label("Sidebar")
-	track.Children(func() {
-		for i, it := range items {
-			b := ui.ButtonBase(c).Height(24).Grow(1).MinWidth(0).Center().Padding(0, 2).Radius(6).Gap(2).
-				Label(it.name).Tooltip(it.name)
-			if w.tab == i {
-				b.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)
-			} else {
-				b.TextColor(t.TextMuted)
-				if b.Hovered() {
-					b.Background(ui.RGBA(127, 127, 127, 0.10))
-				}
-			}
-			if b.Clicked() {
-				w.tab = i
-				changed = true
-			}
-			b.Children(func() {
-				if showText {
-					ui.Icon(c, it.icon).FontSize(13)
-					ui.Text(c, it.label).FontSize(10).FontWeight(600).SingleLine()
-					return
-				}
-				ui.Icon(c, it.icon).FontSize(15)
-			})
-		}
-	})
-	return changed
-}
-
 // sidebarToggle shows and hides the sidebar.
 func (w *window) sidebarToggle(c *ui.Context) {
-	tip := "Hide sidebar (⌘⇧B)"
+	tip := "Hide navigator (⌘⇧B)"
 	if !w.sidebarShown {
-		tip = "Show sidebar (⌘⇧B)"
+		tip = "Show navigator (⌘⇧B)"
 	}
 	if iconButton(c, iconSidebar, tip).Clicked() {
 		w.toggleSidebar()
@@ -517,7 +500,6 @@ func (w *window) fileTree(c *ui.Context) {
 	choose := func(key string) {
 		w.treeSel = key
 		if n := w.treeItems[key]; n != nil && !n.dir {
-			w.commitOpen = false
 			w.revealFile(n.file)
 		}
 	}
@@ -543,7 +525,7 @@ func (w *window) fileTree(c *ui.Context) {
 			row.Background(t.Accent)
 			textColor = t.AccentText
 		case selected:
-			row.Background(ui.RGBA(127, 127, 127, 0.2))
+			row.Background(t.Accent.Alpha(0.10))
 		case row.Hovered():
 			row.Background(ui.RGBA(127, 127, 127, 0.08))
 		}
@@ -953,7 +935,7 @@ func (w *window) historyView(c *ui.Context) {
 			row.Background(t.Accent).TextColor(t.AccentText)
 			muted, ref = t.AccentText.Alpha(0.75), t.AccentText
 		case i == current:
-			row.Background(ui.RGBA(127, 127, 127, 0.2))
+			row.Background(t.Accent.Alpha(0.10))
 		case row.Hovered():
 			row.Background(ui.RGBA(127, 127, 127, 0.08))
 		}
@@ -1059,6 +1041,10 @@ func (w *window) sidebarFooter(c *ui.Context, pal *palette) {
 		}
 	}
 	canCommit := w.tab == 0 && w.source.kind == sourceWorkingTree && len(w.files) > 0
+	if w.commitOpen && canCommit {
+		// The dock above carries the totals and the action while it is open.
+		return
+	}
 	if !(counted && w.tab == 0) && !canCommit {
 		return
 	}

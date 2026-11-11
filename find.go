@@ -205,6 +205,7 @@ func (w *window) nextHunk(dir int) {
 	}
 	a := anchors[at]
 	w.selFile, w.selHunk, w.noteSel = a.file, a.hunk, nil
+	w.activePath, w.activeLine = "", 0
 	if a.hunk < 0 {
 		w.list.ScrollTo(a.row, ui.Start)
 	} else {
@@ -224,9 +225,13 @@ func (w *window) isSelectedLine(f *fileState, s lineSide) bool {
 	return w.files[w.selFile] == f
 }
 
-// commentOnSelection starts a comment on the changed lines of the hunk
-// chosen with j and k.
+// commentOnSelection starts a comment on the chosen line, or on the
+// changed lines of the hunk chosen with j and k.
 func (w *window) commentOnSelection() bool {
+	if w.activeLine > 0 && w.activePath != "" {
+		w.addComment(w.activePath, w.activeSide, w.activeLine, w.activeLine)
+		return true
+	}
 	if w.selFile < 0 || w.selFile >= len(w.files) || w.selHunk < 0 {
 		return false
 	}

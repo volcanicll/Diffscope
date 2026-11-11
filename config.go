@@ -25,19 +25,21 @@ type Settings struct {
 	// GithubToken reads and reviews pull requests; empty, the token of
 	// the GitHub CLI is used.
 	GithubToken string `json:"githubToken"`
-	// AIAgent reviews changes: claude, codex, opencode or pi, or empty for
-	// the first installed. AIModel is the model it uses, of any of its
-	// providers, as the AI Review card chooses it; empty for its own
-	// default, which for OpenCode is the one its own interface starts
-	// with.
+	// AIAgent reviews changes when aiReviewEnabled: claude, codex,
+	// opencode or pi, or empty for the first installed. AIModel is the
+	// model it uses, of any of its providers, as the AI Review card
+	// chooses it; empty for its own default, which for OpenCode is the one
+	// its own interface starts with.
 	AIAgent              string `json:"aiAgent"`
 	AIModel              string `json:"aiModel"`
 	ReviewCommentsPrefix string `json:"reviewCommentsPrefix"`
-	SidebarPosition      string `json:"sidebarPosition"`  // left or right
-	TerminalPosition     string `json:"terminalPosition"` // bottom or right
-	ShowWhitespace       bool   `json:"showWhitespace"`
-	Theme                string `json:"theme"` // system, light or dark
-	WordWrap             bool   `json:"wordWrap"`
+	// SidebarPosition is accepted for older configs; the navigator stays
+	// beside the rail, on the left.
+	SidebarPosition  string `json:"sidebarPosition"`
+	TerminalPosition string `json:"terminalPosition"` // bottom or right
+	ShowWhitespace   bool   `json:"showWhitespace"`
+	Theme            string `json:"theme"` // system, light or dark
+	WordWrap         bool   `json:"wordWrap"`
 }
 
 func defaultSettings() Settings {

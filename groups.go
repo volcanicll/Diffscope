@@ -98,6 +98,12 @@ func kindOf(f *diff.File) int {
 // grouping returns how the files group now: as the user chose, else as
 // fits the source.
 func (w *window) grouping() groupMode {
+	if !aiReviewEnabled {
+		if w.groupPref == groupKind || w.source.kind == sourcePull {
+			return groupKind
+		}
+		return groupNone
+	}
 	an := w.analysisResult()
 	mode := w.groupPref
 	if mode == groupAI && an == nil {
@@ -266,64 +272,6 @@ func groupIcon(g *fileGroup) *ui.SVG {
 	return iconLayers
 }
 
-// scopeBar shows the groups as chips, with how many of their files were
-// viewed; a chip scrolls to its group.
-func (w *window) scopeBar(c *ui.Context, pal *palette) {
-	if len(w.groups) == 0 {
-		return
-	}
-	t := c.Theme()
-	active := -1
-	if w.current >= 0 && w.current < len(w.files) {
-		active = w.files[w.current].group
-	}
-	viewed := make([]int, len(w.groups))
-	total := make([]int, len(w.groups))
-	for _, f := range w.files {
-		if f.group < 0 {
-			continue
-		}
-		total[f.group]++
-		if w.isViewed(f) {
-			viewed[f.group]++
-		}
-	}
-	ui.ScrollHorizontal(c).Shrink(0).Padding(8, 12, 0).Children(func() {
-		ui.Row(c).Gap(6).Children(func() {
-			for gi := range w.groups {
-				g := &w.groups[gi]
-				tip := g.label
-				if g.summary != "" {
-					tip += ": " + g.summary
-				}
-				b := ui.ButtonBase(c.Key(g.key)).Height(26).Padding(0, 10, 0, 8).Gap(6).Radius(13).Label(g.label).Tooltip(tip).
-					Border(1, ui.RGBA(127, 127, 127, 0.18)).Shrink(0)
-				switch {
-				case gi == active:
-					b.Background(t.Accent.Alpha(0.14)).Border(1, t.Accent.Alpha(0.45))
-				case b.Hovered():
-					b.Background(pal.hover)
-				}
-				if b.Clicked() {
-					w.revealGroup(gi)
-				}
-				done := viewed[gi] == total[gi] && total[gi] > 0
-				b.Children(func() {
-					icon := ui.Icon(c, groupIcon(g)).FontSize(12).TextColor(t.TextMuted)
-					if g.critical {
-						icon.TextColor(t.Danger)
-					}
-					ui.Text(c, g.label).FontSize(12).FontWeight(600).SingleLine()
-					count := ui.Textf(c, "%d/%d", viewed[gi], total[gi]).Font(w.codeFont()).FontSize(10).FontWeight(600).TextColor(t.TextMuted)
-					if done {
-						count.TextColor(pal.viewed)
-					}
-				})
-			}
-		})
-	})
-}
-
 // groupRow is the header of a group on the surface: its name, why it is,
 // and how much of it was viewed.
 func (w *window) groupRow(c *ui.Context, pal *palette, gi int) {
@@ -406,6 +354,10 @@ type aiNote struct {
 // buildNotes gathers the notes of the agent's review on files unchanged
 // since: on others, the lines they are on may have moved.
 func (w *window) buildNotes() {
+	if !aiReviewEnabled {
+		w.notes, w.noteSel = nil, nil
+		return
+	}
 	sel := w.noteSel
 	w.notes, w.noteSel = nil, nil
 	st := w.analyses[w.source]
@@ -450,38 +402,36 @@ func (w *window) buildNotes() {
 }
 
 // noteRow shows a note of the agent's review, under the line it is on or
-// atop the file.
+// atop the file. It is a quiet layer on the page, never a card between the
+// lines.
 func (w *window) noteRow(c *ui.Context, pal *palette, n *aiNote) {
 	t := c.Theme()
 	accent := t.Accent
 	if n.critical {
 		accent = t.Danger
 	}
-	border := accent.Alpha(0.22)
+	row := ui.Row(c).Background(pal.codeBg).Padding(5, 14, 6, 16).Gap(8).AlignItems(ui.Start).
+		BorderWidth(0, 0, 0, 2).BorderColor(accent)
 	if n == w.noteSel {
-		// The note gone to last.
-		border = accent
+		row.Background(accent.Alpha(0.06)).BorderColor(accent)
 	}
-	w.card(c, pal).Padding(6, 16).Children(func() {
-		ui.Row(c).Grow(1).MinWidth(0).Gap(10).Padding(8, 12).Radius(10).AlignItems(ui.Start).
-			Background(accent.Alpha(0.07)).Border(1, border).Children(func() {
-			ui.Icon(c, iconSparkle).FontSize(14).TextColor(accent).Margin(1, 0, 0)
-			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				label := "AI note"
-				switch {
-				case n.file:
-					label = "AI note on this file"
-				case n.side == sideOld:
-					label = "AI note · old line " + itoa(n.line)
-				default:
-					label = "AI note · line " + itoa(n.line)
-				}
-				if n.critical {
-					label += " · needs care"
-				}
-				ui.Text(c, label).FontSize(11).FontWeight(600).TextColor(accent)
-				ui.Text(c, n.text).FontSize(13).Selectable()
-			})
+	row.Children(func() {
+		ui.Icon(c, iconSparkle).FontSize(12).TextColor(accent).Margin(2, 0, 0)
+		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+			label := "AI note"
+			switch {
+			case n.file:
+				label = "AI note on this file"
+			case n.side == sideOld:
+				label = "AI note · old line " + itoa(n.line)
+			default:
+				label = "AI note · line " + itoa(n.line)
+			}
+			if n.critical {
+				label += " · needs care"
+			}
+			ui.Text(c, label).FontSize(10.5).FontWeight(600).TextColor(accent)
+			ui.Text(c, n.text).FontSize(12.5).TextColor(t.Text.Alpha(0.9)).MaxLines(2).Selectable()
 		})
 	})
 }
@@ -510,6 +460,9 @@ func (w *window) orderedNotes() []*aiNote {
 // agent's review, after the one shown last, else after the file at the
 // top, and around from the end.
 func (w *window) nextNote(dir int) {
+	if !aiReviewEnabled {
+		return
+	}
 	notes := w.orderedNotes()
 	if len(notes) == 0 {
 		return
@@ -539,6 +492,9 @@ func (w *window) nextNote(dir int) {
 // revealNote scrolls a note of the agent's review into the middle of the
 // surface, opening its file when closed, and marks it.
 func (w *window) revealNote(n *aiNote) {
+	if !aiReviewEnabled {
+		return
+	}
 	fi := slices.IndexFunc(w.files, func(f *fileState) bool { return f.Path == n.path })
 	if fi < 0 {
 		return

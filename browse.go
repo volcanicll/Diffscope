@@ -351,8 +351,8 @@ func (w *window) browseView(c *ui.Context, pal *palette) {
 	t := c.Theme()
 	path := w.browse
 	ui.Column(c).Grow(1).Background(pal.appBg).Children(func() {
-		head := ui.Row(c).Height(46).Padding(0, 12).Gap(8).Shrink(0).
-			Background(pal.headerBg).Border(1, pal.cardBorder)
+		head := ui.Row(c).Height(38).Padding(0, 10).Gap(6).Shrink(0).
+			Background(pal.headerBg).BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder)
 		// The file shown offers its actions, right here, too.
 		head.ContextMenu(func(m *ui.Menu) {
 			w.fileMenu(c, m, path, true)

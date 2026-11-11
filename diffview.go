@@ -8,11 +8,9 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/volcanicll/diffscope/internal/diff"
+	"github.com/volcanicll/diffscope/internal/github"
 	"github.com/volcanicll/diffscope/internal/highlight"
 )
-
-// cardRadius rounds the corners of the files' cards.
-const cardRadius = 10
 
 // codeFont is the family of the code.
 func (w *window) codeFont() string {
@@ -71,7 +69,8 @@ func (f *fileState) metrics() fileMetrics {
 	return f.metric
 }
 
-// diffList shows the files' cards, building the rows in view only.
+// diffList shows the files as one continuous document, building the rows
+// in view only.
 func (w *window) diffList(c *ui.Context) {
 	t := c.Theme()
 	pal := paletteFor(t)
@@ -79,8 +78,9 @@ func (w *window) diffList(c *ui.Context) {
 		w.updateMatches()
 		w.buildRows()
 	}
+	w.measureGutter()
 	ui.List(c, &w.list, len(w.rows), func(i int) { w.diffRow(c, pal, i, w.list.FocusWithin(c)) }).
-		Grow(1).Padding(0, 12, 24).Background(pal.appBg).Label("Changes")
+		Grow(1).Padding(0, 0, 24).Background(pal.codeBg).Label("Changes")
 
 	// The file at the top follows the scrolling, and the tree with it.
 	first, _ := w.list.Visible()
@@ -94,6 +94,28 @@ func (w *window) diffList(c *ui.Context) {
 			w.selectTreeFile(file)
 		}
 	}
+}
+
+// nextFile moves the reading position to the next or previous visible
+// file, the way an editor walks its buffers.
+func (w *window) nextFile(dir int) {
+	var visible []int
+	for i := range w.files {
+		if w.fileVisible(i) {
+			visible = append(visible, i)
+		}
+	}
+	if len(visible) == 0 {
+		return
+	}
+	at := 0
+	for i, fi := range visible {
+		if fi == w.current {
+			at = i
+		}
+	}
+	at = min(max(at+dir, 0), len(visible)-1)
+	w.revealFile(visible[at])
 }
 
 // revealFile scrolls the surface to a file's card.
@@ -116,13 +138,13 @@ func (w *window) diffRow(c *ui.Context, pal *palette, i int, focused bool) {
 	r := &w.rows[i]
 	switch r.kind {
 	case rowCommit:
-		w.commitMessage(c, pal).Margin(12, 0, 0)
+		w.commitMessage(c, pal)
 		return
 	case rowPull:
-		w.pullHeader(c, pal).Margin(12, 0, 0)
+		w.pullHeader(c, pal)
 		return
 	case rowSummary:
-		w.summaryCard(c, pal).Margin(12, 0, 0)
+		w.summaryCard(c, pal)
 		return
 	case rowGroup:
 		w.groupRow(c, pal, int(r.gap))
@@ -142,6 +164,8 @@ func (w *window) diffRow(c *ui.Context, pal *palette, i int, focused bool) {
 		})
 	case rowGap:
 		w.gapRow(c, pal, f, r)
+	case rowHunk:
+		w.hunkHeaderRow(c, pal, f, int(r.gap))
 	case rowImage:
 		w.imageRow(c, pal, f)
 	case rowLine:
@@ -149,18 +173,14 @@ func (w *window) diffRow(c *ui.Context, pal *palette, i int, focused bool) {
 	case rowComment:
 		w.commentRow(c, pal, f, r.comment)
 	case rowEnd:
-		if f.collapsed && !w.forceOpen(int(r.file)) {
-			ui.Box(c).Height(0)
-			return
-		}
-		ui.Box(c).Height(4).Background(pal.codeBg).
-			BorderWidth(0, 1, 1, 1).BorderColor(pal.cardBorder).Radius(0, 0, cardRadius, cardRadius)
+		ui.Box(c).Height(0)
 	}
 }
 
-// card is a row inside a file's card, between its sides.
+// card is a row inside the document. The document is one surface: the
+// rows have no sides of their own.
 func (w *window) card(c *ui.Context, pal *palette) ui.Element {
-	return ui.Row(c).Background(pal.codeBg).BorderWidth(0, 1, 0, 1).BorderColor(pal.cardBorder)
+	return ui.Row(c).Background(pal.codeBg)
 }
 
 // forceOpen reports whether a collapsed file shows its lines anyway, as
@@ -173,39 +193,21 @@ func (w *window) fileHeader(c *ui.Context, pal *palette, idx int, f *fileState, 
 	t := c.Theme()
 	collapsed := f.collapsed && !w.forceOpen(idx)
 	viewed := w.isViewed(f)
-	// The band above the header spaces the cards, and hides the lines
-	// scrolling under it while it is pinned.
-	band := ui.Column(c).Padding(12, 0, 0, 0).Background(pal.appBg)
+	// The band above the bar spaces the files, and hides the lines scrolling
+	// under the bar while it is pinned.
+	band := ui.Column(c).Padding(8, 0, 0, 0).Background(pal.appBg)
 	var h ui.Element
 	band.Children(func() {
-		h = ui.Row(c).Height(46).Padding(0, 8, 0, 6).Gap(8).Background(pal.headerBg).Border(1, pal.cardBorder)
+		h = ui.Row(c).Height(38).Padding(0, 8, 0, 8).Gap(6).Background(pal.headerBg).
+			BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder)
 	})
-	if collapsed {
-		h.Radius(cardRadius)
-	} else {
-		h.Radius(cardRadius, cardRadius, 0, 0)
-	}
-	if idx == w.current && focused {
-		h.Border(1, t.Accent.Alpha(0.6))
-	}
-	h.ContextMenu(func(m *ui.Menu) {
-		if m.Item("Open in Editor").Disabled(f.Status == diff.Deleted).Chosen() {
-			w.openInEditor(f.Path, firstLine(f))
-		}
-		w.fileMenu(c, m, f.Path, w.canEdit(f))
-		if m.Item("Viewed").Checked(viewed).Chosen() {
-			w.setViewed(f, !viewed)
-		}
-		m.Separator()
-		if m.Item("Collapse All").Chosen() {
-			w.setAllCollapsed(true)
-		}
-		if m.Item("Expand All").Chosen() {
-			w.setAllCollapsed(false)
-		}
-	})
+	h.ContextMenu(func(m *ui.Menu) { w.fileHeaderMenu(c, m, f, viewed) })
 	h.Children(func() {
-		toggle := ui.ButtonBase(c).Gap(8).Grow(1).Shrink(1).MinWidth(0).Height(46).Label(f.Path).Tooltip(f.Path)
+		if idx == w.current {
+			// The file at the top of the document keeps a quiet edge.
+			ui.Box(c).Absolute().Left(0).Top(0).Bottom(0).Width(2).Background(t.Accent)
+		}
+		toggle := ui.ButtonBase(c).Gap(6).Grow(1).Shrink(1).MinWidth(0).Height(38).Justify(ui.Start).Label(f.Path).Tooltip(f.Path)
 		if toggle.Clicked() {
 			f.collapsed = !collapsed
 			if !f.collapsed && w.searching() {
@@ -214,35 +216,37 @@ func (w *window) fileHeader(c *ui.Context, pal *palette, idx int, f *fileState, 
 			w.rowsDirty = true
 		}
 		toggle.FocusRing(false).Children(func() {
-			chevron := ui.Box(c).Size(26, 26).Radius(13).Center().Shrink(0)
+			chev := ui.Box(c).Size(20, 20).Radius(4).Center().Shrink(0)
 			if toggle.Hovered() {
-				chevron.Background(pal.hover)
+				chev.Background(pal.hover)
 			}
-			chevron.Children(func() {
+			chev.Children(func() {
 				target := float32(0)
 				if collapsed {
 					target = -90
 				}
-				ic := ui.Icon(c, iconChevronDown).FontSize(15).TextColor(t.TextMuted)
-				ic.Rotate(ic.Animate("rot", target, 160*time.Millisecond))
+				ic := ui.Icon(c, iconChevronDown).FontSize(14).TextColor(t.TextMuted)
+				ic.Rotate(ic.Animate("rot", target, 150*time.Millisecond))
 			})
 			pathColor := t.Text
 			if collapsed || viewed {
 				pathColor = t.TextMuted
 			}
 			fileIcon(c, f, 15)
-			ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(1).Children(func() {
+			ui.Column(c).Shrink(1).MinWidth(0).Children(func() {
 				ui.RichText(c,
-					ui.Span{Text: f.Dir(), Color: t.TextMuted},
-					ui.Span{Text: f.Name(), Color: pathColor, Weight: 600},
-				).Font(w.codeFont()).FontSize(13).SingleLine()
+					ui.Span{Text: f.Dir(), Color: t.TextMuted, Size: 12},
+					ui.Span{Text: f.Name(), Color: pathColor, Weight: 600, Size: 12.5},
+				).Font(w.codeFont()).SingleLine()
 				if f.OldPath != f.Path {
-					ui.Text(c, "from "+f.OldPath).Font(w.codeFont()).FontSize(11).TextColor(t.TextMuted).SingleLine()
+					ui.Text(c, "from "+f.OldPath).Font(w.codeFont()).FontSize(10.5).TextColor(t.TextMuted).SingleLine()
 				}
 			})
+			ui.Text(c, statusLetter(f)).Font(w.codeFont()).FontSize(10).FontWeight(700).
+				TextColor(statusColor(f.Status, pal, t)).Width(10).TextAlign(ui.Center).Shrink(0).Tooltip(f.Status.Label())
 		})
-		// The copy button shows while the pointer is over the header; it
-		// is always built, so that the elements after it keep their state.
+		// The copy button shows while the pointer is over the bar; it is
+		// always built, so that the elements after it keep their state.
 		cp := iconButton(c, iconCopy, "Copy path")
 		if !h.Hovered() && !cp.FocusVisible() {
 			cp.Opacity(0)
@@ -262,15 +266,15 @@ func (w *window) fileHeader(c *ui.Context, pal *palette, idx int, f *fileState, 
 			w.openInEditor(f.Path, firstLine(f))
 		}
 		if countable(f) && (f.Additions > 0 || f.Deletions > 0) {
-			ui.Row(c).Gap(8).Padding(4, 9).Radius(14).Background(pal.pill).Shrink(0).
+			ui.Row(c).Gap(4).Shrink(0).
 				Tooltip(lines(f.Additions, "added") + ", " + lines(f.Deletions, "removed")).Children(func() {
-				ui.Text(c, "+"+thousands(f.Additions)).Font(w.codeFont()).FontSize(12).FontWeight(600).TextColor(pal.addText)
-				ui.Text(c, "-"+thousands(f.Deletions)).Font(w.codeFont()).FontSize(12).FontWeight(600).TextColor(pal.delText)
+				ui.Text(c, "+"+thousands(f.Additions)).Font(w.codeFont()).FontSize(11).FontWeight(600).TextColor(pal.addText)
+				ui.Text(c, "-"+thousands(f.Deletions)).Font(w.codeFont()).FontSize(11).FontWeight(600).TextColor(pal.delText)
 			})
 		}
 		if f.Generated {
-			ui.Text(c, "Generated").FontSize(11).FontWeight(600).Padding(4, 9).Radius(14).
-				Background(pal.ref.Alpha(0.15)).TextColor(pal.ref).Shrink(0)
+			ui.Text(c, "Generated").FontSize(10.5).FontWeight(600).Padding(2, 6).Radius(8).
+				Background(pal.ref.Alpha(0.13)).TextColor(pal.ref).Shrink(0)
 		}
 		// What the index holds, when the review shows all the changes:
 		// a file staged alone, or one with more changes in the work tree.
@@ -279,44 +283,82 @@ func (w *window) fileHeader(c *ui.Context, pal *palette, idx int, f *fileState, 
 			if f.Unstaged {
 				label = "Staged + Unstaged"
 			}
-			ui.Text(c, label).FontSize(11).FontWeight(600).Padding(4, 9).Radius(14).
-				Background(pal.viewed.Alpha(0.15)).TextColor(pal.viewed).Shrink(0).
+			ui.Text(c, label).FontSize(10.5).FontWeight(600).Padding(2, 6).Radius(8).
+				Background(pal.viewed.Alpha(0.13)).TextColor(pal.viewed).Shrink(0).
 				Tooltip("The index holds changes of this file" + map[bool]string{true: ", and so does the work tree", false: ""}[f.Unstaged])
 		}
-		if n := w.openThreads(f.Path); n > 0 {
-			ui.Row(c).Gap(4).Padding(4, 9).Radius(14).Background(pal.pill).TextColor(t.TextMuted).Shrink(0).
-				Tooltip(plural(n, "unresolved thread")).Children(func() {
+		if n := w.annotationCount(f); n > 0 {
+			ui.Row(c).Gap(3).TextColor(t.TextMuted).Shrink(0).
+				Tooltip(plural(n, "annotation")).Children(func() {
 				ui.Icon(c, iconComment).FontSize(12)
-				ui.Text(c, itoa(n)).Font(w.codeFont()).FontSize(12).FontWeight(600)
+				ui.Text(c, itoa(n)).Font(w.codeFont()).FontSize(10.5)
 			})
 		}
 		w.viewedButton(c, pal, f, viewed)
+		more := iconButton(c, iconMore, "File actions")
+		if !h.Hovered() && !more.FocusVisible() {
+			more.Opacity(0)
+		}
+		more.Menu(func(m *ui.Menu) { w.fileHeaderMenu(c, m, f, viewed) })
 	})
+}
+
+// fileHeaderMenu adds the actions of a file's bar to a menu.
+func (w *window) fileHeaderMenu(c *ui.Context, m *ui.Menu, f *fileState, viewed bool) {
+	if m.Item("Open in Editor").Disabled(f.Status == diff.Deleted).Chosen() {
+		w.openInEditor(f.Path, firstLine(f))
+	}
+	w.fileMenu(c, m, f.Path, w.canEdit(f))
+	if m.Item("Viewed").Checked(viewed).Chosen() {
+		w.setViewed(f, !viewed)
+	}
+	m.Separator()
+	if m.Item("Collapse All").Chosen() {
+		w.setAllCollapsed(true)
+	}
+	if m.Item("Expand All").Chosen() {
+		w.setAllCollapsed(false)
+	}
+}
+
+// annotationCount is how many comments, threads and AI notes a file's bar
+// reports.
+func (w *window) annotationCount(f *fileState) int {
+	n := len(w.notes[f.Path])
+	for _, cm := range w.comments {
+		if cm.path == f.Path {
+			n++
+		}
+	}
+	for _, t := range w.threads(f.Path) {
+		if !t.Outdated {
+			n++
+		}
+	}
+	return n
 }
 
 // viewedButton marks a file viewed, which collapses it.
 func (w *window) viewedButton(c *ui.Context, pal *palette, f *fileState, viewed bool) {
 	t := c.Theme()
-	on := viewed
-	b := ui.CheckboxBase(c, &on).Gap(7).Height(30).Padding(0, 11).Radius(14).Shrink(0).
-		Border(1, ui.RGBA(127, 127, 127, 0.22)).Label("Viewed")
-	b.OnClick(func() { w.setViewed(f, on) })
+	b := ui.ButtonBase(c).Gap(6).Height(26).Padding(0, 6).Radius(13).Shrink(0).Label("Viewed")
+	b.OnClick(func() { w.setViewed(f, !viewed) })
 	if b.Hovered() {
 		b.Background(pal.hover)
 	}
 	if viewed {
-		b.Border(1, pal.viewed.Alpha(0.44)).TextColor(pal.viewed)
+		b.TextColor(pal.viewed)
 	}
 	b.Children(func() {
 		box := ui.Box(c).Size(15, 15).Radius(4).Center()
 		if viewed {
 			box.Background(pal.viewed).Children(func() {
-				ui.Icon(c, iconCheck).FontSize(11).TextColor(pal.codeBg)
+				ui.Icon(c, iconCheck).FontSize(10).TextColor(pal.codeBg)
 			})
 		} else {
 			box.Border(1.5, ui.RGBA(127, 127, 127, 0.45))
 		}
-		ui.Text(c, "Viewed").FontSize(12).FontWeight(600).TextColor(map[bool]ui.Color{true: pal.viewed, false: t.Text}[viewed])
+		ui.Text(c, "Viewed").FontSize(11).FontWeight(600).TextColor(map[bool]ui.Color{true: pal.viewed, false: t.Text}[viewed])
 	})
 }
 
@@ -343,9 +385,41 @@ func firstLine(f *fileState) int {
 	return 0
 }
 
+// measureGutter finds the widest line number the document shows, so that
+// every file's numbers share one column.
+func (w *window) measureGutter() {
+	digits := 3
+	for i := range w.files {
+		if !w.fileVisible(i) {
+			continue
+		}
+		digits = max(digits, w.files[i].metrics().digits)
+	}
+	w.gutterDigits = min(digits, 5)
+}
+
 // gutterWidth is the width of a column of line numbers.
 func (w *window) gutterWidth(c *ui.Context, f *fileState) float32 {
-	return float32(f.metrics().digits)*w.charWidth(c) + 18
+	digits := max(w.gutterDigits, f.metrics().digits)
+	return float32(digits)*w.charWidth(c) + 18
+}
+
+// hunkHeaderRow is a hunk's coordinates, when the gap before it is short
+// enough to show in full and so has no row to carry them.
+func (w *window) hunkHeaderRow(c *ui.Context, pal *palette, f *fileState, hi int) {
+	if hi < 0 || hi >= len(f.Hunks) {
+		return
+	}
+	h := f.Hunks[hi]
+	header := fmt.Sprintf("@@ -%d,%d +%d,%d @@", h.OldStart, h.OldLines, h.NewStart, h.NewLines)
+	if h.Section != "" {
+		header += " " + h.Section
+	}
+	ui.Row(c).Height(24).Grow(1).Padding(0, 10).Background(pal.appBg).
+		BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Justify(ui.Start).Children(func() {
+		ui.Text(c, header).Font(w.codeFont()).FontSize(11).TextColor(pal.gapText).
+			SingleLine().Grow(1).Shrink(1).MinWidth(0)
+	})
 }
 
 func (w *window) gapRow(c *ui.Context, pal *palette, f *fileState, r *row) {
@@ -369,15 +443,15 @@ func (w *window) gapRow(c *ui.Context, pal *palette, f *fileState, r *row) {
 	}
 	all := func() { expand(n, 0) }
 	can := f.canExpand()
-	w.card(c, pal).Height(30).Background(pal.gapBg).Children(func() {
-		ui.Row(c).Width(gutter + 4).Height(30).Shrink(0).Children(func() {
+	ui.Row(c).Height(28).Background(pal.appBg).Children(func() {
+		ui.Row(c).Width(gutter + 4).Height(28).Shrink(0).Children(func() {
 			button := func(svg *ui.SVG, tip string, action func()) {
-				b := ui.ButtonBase(c).Grow(1).Height(30).Center().Label(tip).Tooltip(tip).TextColor(pal.gapText).Disabled(!can)
-				b.BorderWidth(0, 2, 0, 0).BorderColor(pal.codeBg)
+				b := ui.ButtonBase(c).Grow(1).Height(28).Center().Label(tip).Tooltip(tip).TextColor(pal.gapText).Disabled(!can)
+				b.BorderWidth(0, 1, 0, 0).BorderColor(pal.codeBg)
 				if b.Hovered() {
 					b.TextColor(t.Text).Background(pal.hover)
 				}
-				b.Children(func() { ui.Icon(c, svg).FontSize(14) })
+				b.Children(func() { ui.Icon(c, svg).FontSize(13) })
 				if b.Clicked() {
 					action()
 				}
@@ -398,12 +472,12 @@ func (w *window) gapRow(c *ui.Context, pal *palette, f *fileState, r *row) {
 				}
 			}
 		})
-		label := ui.ButtonBase(c).Padding(0, 12).Height(30).FocusRing(false).Disabled(!can).Children(func() {
+		label := ui.ButtonBase(c).Padding(0, 10).Height(28).FocusRing(false).Disabled(!can).Children(func() {
 			text := fmt.Sprintf("%d unmodified lines", n)
 			if n == 1 {
 				text = "1 unmodified line"
 			}
-			ui.Text(c, text).FontSize(12).TextColor(pal.gapText)
+			ui.Text(c, text).FontSize(11.5).TextColor(pal.gapText).SingleLine()
 		})
 		if label.Hovered() && can {
 			label.Underline()
@@ -421,8 +495,8 @@ func (w *window) gapRow(c *ui.Context, pal *palette, f *fileState, r *row) {
 			}
 		}
 		if n > expandStep {
-			b := ui.ButtonBase(c).Padding(3, 8).Radius(6).Disabled(!can).Children(func() {
-				ui.Text(c, "Expand all").FontSize(12).FontWeight(600).TextColor(pal.gapText)
+			b := ui.ButtonBase(c).Padding(2, 7).Radius(5).Disabled(!can).Children(func() {
+				ui.Text(c, "Expand all").FontSize(11).FontWeight(600).TextColor(pal.gapText)
 			})
 			if b.Hovered() {
 				b.Background(pal.hover)
@@ -431,8 +505,17 @@ func (w *window) gapRow(c *ui.Context, pal *palette, f *fileState, r *row) {
 				all()
 			}
 		}
-		if h := r.gap; int(h) < len(f.Hunks) && f.Hunks[h].Section != "" {
-			ui.Text(c, f.Hunks[h].Section).Font(w.codeFont()).FontSize(12).TextColor(pal.gapText).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+		ui.Spacer(c)
+		// The gap is also the hunk's boundary: its coordinates and the
+		// function it belongs to sit at the right, in one row.
+		if int(r.gap) < len(f.Hunks) {
+			h := f.Hunks[r.gap]
+			header := fmt.Sprintf("@@ -%d,%d +%d,%d @@", h.OldStart, h.OldLines, h.NewStart, h.NewLines)
+			if h.Section != "" {
+				header += " " + h.Section
+			}
+			ui.Text(c, header).Font(w.codeFont()).FontSize(11).TextColor(pal.gapText).
+				SingleLine().Shrink(1).MinWidth(0).Padding(0, 10).TextAlign(ui.End)
 		}
 	})
 }
@@ -530,6 +613,7 @@ func (w *window) lineRow(c *ui.Context, pal *palette, f *fileState, r *row) {
 		}
 		e.Children(func() {
 			w.lineCell(c, pal, f, r, s, sd, gutter, hs, !f.oneSided())
+			w.annotationGutter(c, pal, f, r)
 		})
 		return
 	}
@@ -543,6 +627,88 @@ func (w *window) lineRow(c *ui.Context, pal *palette, f *fileState, r *row) {
 		ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
 			w.lineCell(c, pal, f, r, right, sideNew, gutter, hs, false)
 		})
+		w.annotationGutter(c, pal, f, r)
+	})
+}
+
+// rowAnnotationInfo counts the comments, threads and notes on a row and
+// says what its marker should be.
+func (w *window) rowAnnotationInfo(f *fileState, r *row) (n int, critical, ai bool) {
+	check := func(sd side, num int) {
+		if num == 0 {
+			return
+		}
+		for _, cm := range w.comments {
+			if cm.path == f.Path && cm.side == sd && cm.line == num {
+				n++
+			}
+		}
+		for _, nt := range w.notes[f.Path] {
+			if !nt.file && nt.side == sd && nt.line == num {
+				n++
+				ai = true
+				if nt.critical {
+					critical = true
+				}
+			}
+		}
+		for _, t := range w.threads(f.Path) {
+			if t.Outdated || t.Line != num {
+				continue
+			}
+			tsd := sideNew
+			if t.Side == github.Left {
+				tsd = sideOld
+			}
+			if tsd == sd {
+				n++
+			}
+		}
+	}
+	if w.splitFile(f) {
+		if s := w.sideOf(f, r, sideOld); s.present {
+			check(sideOld, s.num)
+		}
+		if s := w.sideOf(f, r, sideNew); s.present {
+			check(sideNew, s.num)
+		}
+	} else {
+		s := w.sideOf(f, r, sideNew)
+		sd := sideNew
+		if s.kind == diff.Del {
+			sd = sideOld
+		}
+		if s.present {
+			check(sd, s.num)
+		}
+	}
+	return n, critical, ai
+}
+
+// annotationGutter is the quiet lane at the right of every line: comments
+// and notes leave a dot here, and the lane keeps its width even when they
+// do not, so the code never shifts.
+func (w *window) annotationGutter(c *ui.Context, pal *palette, f *fileState, r *row) {
+	t := c.Theme()
+	n, critical, ai := w.rowAnnotationInfo(f, r)
+	g := ui.Row(c).Width(16).Shrink(0).AlignSelf(ui.Stretch).Background(pal.codeBg).
+		BorderWidth(0, 0, 0, 1).BorderColor(pal.cardBorder).Center()
+	if n == 0 {
+		return
+	}
+	g.Tooltip(plural(n, "annotation"))
+	color := t.TextMuted
+	switch {
+	case critical:
+		color = t.Danger
+	case ai:
+		color = t.Accent
+	}
+	g.Children(func() {
+		dot := ui.Box(c).Size(6, 6).Radius(3).Background(color)
+		if n > 1 {
+			dot.Border(1, pal.codeBg)
+		}
 	})
 }
 
@@ -561,16 +727,23 @@ func (w *window) lineCell(c *ui.Context, pal *palette, f *fileState, r *row, s l
 	case diff.Del:
 		bg, gutterBg, bar, numColor, wordColor = pal.delBg, pal.delGutter, pal.delBar, pal.delBar, pal.delWord
 	}
+	active := w.activeLine > 0 && w.activePath == f.Path && w.activeSide == sd && w.activeLine == s.num
+	if active {
+		numColor = c.Theme().Accent
+	}
 	cell := ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Stretch).Background(bg)
 	if w.isSelectedLine(f, s) {
-		cell.Background(blend(bg, pal.selected))
-		gutterBg = blend(gutterBg, pal.selected)
+		sel := c.Theme().Accent.Alpha(0.13)
+		cell.Background(blend(bg, sel))
+		gutterBg = blend(gutterBg, sel)
 	} else if cell.Hovered() {
 		cell.Background(blend(bg, pal.hover.Alpha(0.5)))
 		gutterBg = blend(gutterBg, pal.hover.Alpha(0.5))
 	}
 	if cell.Clicked() {
-		w.addComment(f.Path, sd, s.num, s.num)
+		// A click chooses the line; Enter or the + comments on it.
+		w.activePath, w.activeSide, w.activeLine = f.Path, sd, s.num
+		w.selFile, w.selHunk, w.noteSel = -1, -1, nil
 	}
 	cell.ContextMenu(func(m *ui.Menu) {
 		if m.Item(fmt.Sprintf("Comment on Line %d", s.num)).Chosen() {
@@ -615,14 +788,28 @@ func (w *window) lineCell(c *ui.Context, pal *palette, f *fileState, r *row, s l
 			} else {
 				num(s.num, gutter-4)
 			}
+			// The familiar + and - grammar, beside the numbers.
+			mark := ""
+			switch s.kind {
+			case diff.Add:
+				mark = "+"
+			case diff.Del:
+				mark = "−"
+			}
+			ui.Text(c, mark).Font(w.codeFont()).FontSize(w.codeSize() - 2).FixedLineHeight(lh).
+				TextColor(numColor).Width(10).TextAlign(ui.Center).Shrink(0).Opacity(0.8)
 		})
 		spans := w.lineSpans(f, s, sd, pal, wordColor)
 		// The button commenting on the line, at the edge of the numbers
 		// while the pointer is over the line; always built, so that the
 		// elements after it keep their state.
-		numbers := gutter
+		numbers := gutter + 10
 		if unified {
-			numbers = 2*gutter - 4
+			numbers = 2*gutter - 4 + 10
+		}
+		if active {
+			// The chosen line keeps a short accent rule beside its numbers.
+			ui.Box(c).Absolute().Left(numbers - 10).Top(2).Bottom(2).Width(2).Radius(1).Background(c.Theme().Accent)
 		}
 		plus := ui.ButtonBase(c).Absolute().Top((lh-18)/2).Left(numbers-9).Size(18, 18).Radius(5).Center().
 			Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Label("Comment").Tooltip("Comment on this line").FocusRing(false)
@@ -680,26 +867,31 @@ func (w *window) lineSpans(f *fileState, s lineSide, sd side, pal *palette, word
 // blend lays a translucent color over another.
 func blend(base, over ui.Color) ui.Color { return over.Over(base) }
 
-// commentRow shows a comment, under the line it is on.
+// commentRow shows a comment, under the line it is on. It is flat: an
+// accent rule, the author, and the field, with no card around it.
 func (w *window) commentRow(c *ui.Context, pal *palette, f *fileState, cm *comment) {
 	t := c.Theme()
-	w.card(c, pal).Padding(8, 16).Gap(10).AlignItems(ui.Start).Children(func() {
-		ui.Avatar(c, w.userName(), nil).Size(28, 28).Shrink(0)
-		box := ui.Column(c).Grow(1).MinWidth(0).Radius(12).Border(1, pal.cardBorder).Background(pal.headerBg).Clip()
-		box.Children(func() {
-			ui.Row(c).Height(32).Padding(0, 4, 0, 10).Gap(8).BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Children(func() {
-				ui.Text(c, w.userName()).FontSize(12).Bold()
-				ui.Text(c, cm.label()).FontSize(11).TextColor(t.TextMuted)
+	ui.Row(c).Background(pal.codeBg).Padding(7, 14, 8, 16).Gap(8).AlignItems(ui.Start).
+		BorderWidth(0, 0, 0, 2).BorderColor(t.Accent).Children(func() {
+		ui.Avatar(c, w.userName(), nil).Size(20, 20).Shrink(0)
+		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
+			ui.Row(c).Height(20).Gap(6).Children(func() {
+				ui.Text(c, w.userName()).FontSize(11.5).Bold()
+				ui.Text(c, cm.label()).FontSize(10.5).TextColor(t.TextMuted)
 				ui.Spacer(c)
-				if iconButton(c, iconClose, "Delete comment").Size(24, 24).Clicked() {
+				if iconButton(c, iconClose, "Delete comment").Size(20, 20).Clicked() {
 					w.deleteComment(cm)
 				}
 			})
-			area := ui.TextAreaBase(c, &cm.text).Placeholder("Write a review comment…").MinHeight(64).Padding(8, 10).
-				FontSize(13).Label("Review comment")
+			area := ui.TextAreaBase(c, &cm.text).Placeholder("Write a review comment…").MinHeight(56).Padding(6, 8).
+				Radius(6).Background(pal.headerBg).Border(1, pal.cardBorder).FontSize(13).Label("Review comment")
 			if cm.focus {
 				area.Focus()
 				cm.focus = false
+			}
+			if area.Focused() {
+				area.Border(1, t.Accent.Alpha(0.6))
+				w.typing = true
 			}
 			if area.Shortcut(ui.Cmd, ui.KeyEnter) {
 				if w.source.kind == sourcePull && w.pr.canWrite() {
@@ -717,17 +909,11 @@ func (w *window) commentRow(c *ui.Context, pal *palette, f *fileState, cm *comme
 				}
 			}
 			focused := area.Focused()
-			if focused {
-				w.typing = true
-			}
 			if cm.wasFocused && !focused && !cm.pending() {
 				// An empty comment the user left goes.
 				w.deleteComment(cm)
 			}
 			cm.wasFocused = focused
-			if focused {
-				box.Border(1, t.Accent.Alpha(0.6))
-			}
 			if w.source.kind == sourcePull {
 				w.prCommentActions(c, pal, cm)
 			}

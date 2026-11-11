@@ -242,7 +242,7 @@ func TestFileTreeMenuDisablesEditsOnDeletedFile(t *testing.T) {
 
 func TestSidebarSlidesClosedAndOpen(t *testing.T) {
 	w, tt := newTestWindow(t, testRepo(t))
-	if err := tt.Click("Hide sidebar (⌘⇧B)"); err != nil {
+	if err := tt.Click("Hide navigator (⌘⇧B)"); err != nil {
 		t.Fatal(err)
 	}
 	// The sidebar keeps its element while it slides, so the toolbar shows
@@ -255,11 +255,11 @@ func TestSidebarSlidesClosedAndOpen(t *testing.T) {
 	if _, ok := tt.Find("Filter files"); ok {
 		t.Fatal("the closed sidebar still builds its views")
 	}
-	if _, ok := tt.Find("Show sidebar (⌘⇧B)"); !ok {
+	if _, ok := tt.Find("Show navigator (⌘⇧B)"); !ok {
 		t.Fatalf("the toolbar does not show the toggle: %v", tt.Texts())
 	}
 	// And back.
-	if err := tt.Click("Show sidebar (⌘⇧B)"); err != nil {
+	if err := tt.Click("Show navigator (⌘⇧B)"); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(sidebarSlide + 60*time.Millisecond)
@@ -274,23 +274,22 @@ func TestSidebarSlidesClosedAndOpen(t *testing.T) {
 
 func TestSidebarToggleStaysClearOfTheViews(t *testing.T) {
 	w, tt := newTestWindow(t, testRepo(t))
-	// Three views, as a repository on GitHub has, in a sidebar at its
-	// narrowest, under the traffic lights. The Repository opens from the
-	// More menu, so it is not a segment.
+	// The mode rail stays beside the navigator: the toggle is in the title
+	// bar, above both, clear of the traffic lights and of the views.
 	w.gh = ghRemote{repo: github.Repo{Owner: "diffscope", Name: "diffscope"}, remote: "origin"}
 	w.sidebarWidth = sidebarMin
 	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 74})
 	tt.Frame()
-	r, ok := tt.Find("Hide sidebar (⌘⇧B)")
+	r, ok := tt.Find("Hide navigator (⌘⇧B)")
 	if !ok {
 		t.Fatalf("the toggle is missing: %v", tt.Texts())
 	}
-	if r.X < 0 || r.X+r.W > w.sidebarWidth {
-		t.Fatalf("the toggle spans %v, outside the sidebar %v", r, w.sidebarWidth)
+	if r.Y >= titleBarHeight {
+		t.Fatalf("the toggle is not in the title bar: %v", r)
 	}
-	for _, tip := range []string{"Files (⌘1)", "History (⌘2)", "Pull Requests (⌘3)"} {
+	for _, tip := range []string{"Changes (⌘1)", "History (⌘2)", "Pull requests (⌘3)", "Repository (⌘4)"} {
 		if _, ok := tt.Find(tip); !ok {
-			t.Fatalf("the %q view is missing", tip)
+			t.Fatalf("the %q mode is missing", tip)
 		}
 	}
 	snapshot(t, tt, "sidebar-narrow")
